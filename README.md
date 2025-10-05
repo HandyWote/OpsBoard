@@ -48,9 +48,9 @@ OpsBoard 是专为 try 网运维部门设计的任务认领与管理系统。该
 
 ## 📞 联系我们
 
-- 项目维护者：[@your-username](https://github.com/your-username)
-- 邮箱：your-email@example.com
-- 项目链接：[https://github.com/your-username/OpsBoard](https://github.com/your-username/OpsBoard)
+- 项目维护者：[HandyWote](https://github.com/HandyWote)
+- 邮箱：handy@handywote.top
+- 项目链接：[https://github.com/HandyWote/OpsBoard](https://github.com/HandyWote/OpsBoard)
 
 ---
 
