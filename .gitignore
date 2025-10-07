@@ -6,3 +6,5 @@ dist
 AGENTS.md
 demo
 data
+.gocache
+
