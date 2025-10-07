@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: docker.1ms.run/postgres:latest
+    container_name: opsboard-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: opsboard
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: opsboard
+      PGDATA: /var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql
+    networks:
+      - opsboard-network
+
+networks:
+  opsboard-network:
+    driver: bridge
