@@ -11,15 +11,18 @@ import (
 	"backend/internal/storage"
 )
 
-const bcryptCost = 10
+const (
+	bcryptCost      = 10
+	hashAlgorithmID = "bcrypt"
+)
 
 // LoginHandler handles authentication requests.
 type LoginHandler struct {
-	store *storage.FileStore
+	store storage.CredentialStore
 }
 
 // NewLoginHandler constructs a handler backed by the provided store.
-func NewLoginHandler(store *storage.FileStore) *LoginHandler {
+func NewLoginHandler(store storage.CredentialStore) *LoginHandler {
 	return &LoginHandler{
 		store: store,
 	}
@@ -74,13 +77,23 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storedHash, err := h.store.Get(payload.Username)
+	ctx := r.Context()
+
+	cred, err := h.store.GetCredential(ctx, payload.Username)
 	switch {
 	case err == nil:
-		if bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(payload.Password)) != nil {
+		if bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(payload.Password)) != nil {
 			writeJSON(w, http.StatusUnauthorized, loginResponse{
 				Success: false,
 				Message: "用户名或密码错误",
+			})
+			return
+		}
+
+		if err := h.store.RecordSuccessfulLogin(ctx, cred.UserID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, loginResponse{
+				Success: false,
+				Message: "无法记录登录状态",
 			})
 			return
 		}
@@ -100,10 +113,19 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if saveErr := h.store.Upsert(payload.Username, string(hash)); saveErr != nil {
+		cred, err = h.store.CreateUserWithPassword(ctx, payload.Username, string(hash), hashAlgorithmID, bcryptCost)
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, loginResponse{
 				Success: false,
 				Message: "无法保存用户信息",
+			})
+			return
+		}
+
+		if err := h.store.RecordSuccessfulLogin(ctx, cred.UserID); err != nil {
+			writeJSON(w, http.StatusInternalServerError, loginResponse{
+				Success: false,
+				Message: "无法记录登录状态",
 			})
 			return
 		}
