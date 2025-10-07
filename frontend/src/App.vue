@@ -1,12 +1,22 @@
 <script setup>
-import LoginView from './views/LoginView.vue'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+
+const route = useRoute()
+
+const contentClass = computed(() => {
+  if (route.name === 'home') {
+    return 'app-shell__content app-shell__content--wide'
+  }
+  return 'app-shell__content app-shell__content--compact'
+})
 </script>
 
 <template>
   <div class="app-shell">
     <div class="app-shell__background" />
-    <main class="app-shell__content">
-      <LoginView />
+    <main :class="contentClass">
+      <RouterView />
     </main>
   </div>
 </template>
@@ -22,6 +32,7 @@ import LoginView from './views/LoginView.vue'
     linear-gradient(135deg, #5b86e5, #36d1dc);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow: hidden;
+  padding: 32px 16px;
 }
 
 .app-shell__background {
@@ -38,10 +49,17 @@ import LoginView from './views/LoginView.vue'
 .app-shell__content {
   position: relative;
   width: 100%;
-  max-width: 420px;
-  padding: 40px 16px;
   display: flex;
   justify-content: center;
   z-index: 1;
+  transition: max-width 0.4s ease;
+}
+
+.app-shell__content--compact {
+  max-width: 420px;
+}
+
+.app-shell__content--wide {
+  max-width: 1080px;
 }
 </style>

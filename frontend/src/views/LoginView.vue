@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { login } from '../services/auth.js'
 
 const form = reactive({
@@ -29,6 +30,7 @@ const feedback = reactive({
 
 const loading = ref(false)
 const visible = ref(false)
+const router = useRouter()
 
 const canSubmit = computed(() => !loading.value && !errors.username && !errors.password && form.username && form.password)
 
@@ -85,8 +87,8 @@ const submit = async () => {
       feedback.message = response.message || '登录成功，正在为您跳转...'
       await nextTick()
       setTimeout(() => {
-        window.location.href = '/'
-      }, 1200)
+        router.push({ name: 'home' })
+      }, 1000)
     } else {
       feedback.type = 'error'
       feedback.message = response.message || '用户名或密码错误'
