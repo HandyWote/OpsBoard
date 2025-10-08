@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -61,19 +62,26 @@ SELECT
 	cred.password_hash,
 	cred.hash_algorithm,
 	cred.hash_cost,
-	ARRAY(
-		SELECT role_key
-		FROM user_roles
-		WHERE user_id = u.id
+	COALESCE(
+		JSONB_AGG(r.role_key) FILTER (WHERE r.role_key IS NOT NULL),
+		'[]'::jsonb
 	) AS roles
 FROM users u
 JOIN user_credentials cred ON cred.user_id = u.id
+LEFT JOIN user_roles r ON r.user_id = u.id
 WHERE lower(u.username) = lower($1)
+GROUP BY
+	u.id,
+	u.username,
+	u.display_name,
+	cred.password_hash,
+	cred.hash_algorithm,
+	cred.hash_cost
 LIMIT 1
 `
 
 	var cred Credential
-	var roles []string
+	var rolesRaw []byte
 	err := r.db.QueryRowContext(ctx, query, username).Scan(
 		&cred.UserID,
 		&cred.Username,
@@ -81,7 +89,7 @@ LIMIT 1
 		&cred.PasswordHash,
 		&cred.HashAlgorithm,
 		&cred.HashCost,
-		&roles,
+		&rolesRaw,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -91,10 +99,11 @@ LIMIT 1
 		return Credential{}, err
 	}
 
-	cred.Roles = make([]user.Role, 0, len(roles))
-	for _, role := range roles {
-		cred.Roles = append(cred.Roles, user.Role(role))
+	roles, err := parseRolesJSON(rolesRaw)
+	if err != nil {
+		return Credential{}, fmt.Errorf("decode credential roles: %w", err)
 	}
+	cred.Roles = roles
 
 	return cred, nil
 }
@@ -175,21 +184,26 @@ SELECT
 	u.id,
 	u.username,
 	u.display_name,
-	u.email,
-	u.headline,
-	u.bio,
-	u.avatar_url,
+	COALESCE(u.email, ''),
+	COALESCE(u.headline, ''),
+	COALESCE(u.bio, ''),
+	COALESCE(u.avatar_url, ''),
 	u.status,
 	u.last_login_at,
 	u.created_at,
 	u.updated_at,
-	ARRAY(
-		SELECT role_key FROM user_roles WHERE user_id = u.id
-	)
+	COALESCE(
+		(
+			SELECT JSONB_AGG(role_key)
+			FROM user_roles
+			WHERE user_id = u.id
+		),
+		'[]'::jsonb
+	) AS roles
 FROM users u
 WHERE u.id = $1
 `
-	var roles []string
+	var rolesRaw []byte
 	var u user.User
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&u.ID,
@@ -203,7 +217,7 @@ WHERE u.id = $1
 		&u.LastLoginAt,
 		&u.CreatedAt,
 		&u.UpdatedAt,
-		&roles,
+		&rolesRaw,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return user.User{}, ErrNotFound
@@ -212,10 +226,11 @@ WHERE u.id = $1
 		return user.User{}, err
 	}
 
-	u.Roles = make([]user.Role, 0, len(roles))
-	for _, role := range roles {
-		u.Roles = append(u.Roles, user.Role(role))
+	roles, err := parseRolesJSON(rolesRaw)
+	if err != nil {
+		return user.User{}, fmt.Errorf("decode user roles: %w", err)
 	}
+	u.Roles = roles
 	return u, nil
 }
 
@@ -227,7 +242,18 @@ SET display_name = $2,
 	bio = $4,
 	updated_at = $5
 WHERE id = $1
-RETURNING id, username, display_name, email, headline, bio, avatar_url, status, last_login_at, created_at, updated_at
+RETURNING
+	id,
+	username,
+	display_name,
+	COALESCE(email, ''),
+	COALESCE(headline, ''),
+	COALESCE(bio, ''),
+	COALESCE(avatar_url, ''),
+	status,
+	last_login_at,
+	created_at,
+	updated_at
 `
 
 	now := time.Now().UTC()
@@ -284,15 +310,18 @@ SELECT
 	u.id,
 	u.username,
 	u.display_name,
-	u.email,
-	u.headline,
-	u.bio,
-	u.avatar_url,
+	COALESCE(u.email, ''),
+	COALESCE(u.headline, ''),
+	COALESCE(u.bio, ''),
+	COALESCE(u.avatar_url, ''),
 	u.status,
 	u.last_login_at,
 	u.created_at,
 	u.updated_at,
-	COALESCE(ARRAY_AGG(r.role_key) FILTER (WHERE r.role_key IS NOT NULL), '{}') AS roles
+	COALESCE(
+		JSONB_AGG(r.role_key) FILTER (WHERE r.role_key IS NOT NULL),
+		'[]'::jsonb
+	) AS roles
 FROM users u
 LEFT JOIN user_roles r ON r.user_id = u.id
 `
@@ -320,7 +349,7 @@ LIMIT $1 OFFSET $2
 
 	users := make([]user.User, 0)
 	for rows.Next() {
-		var roles []string
+		var rolesRaw []byte
 		var u user.User
 		if err := rows.Scan(
 			&u.ID,
@@ -334,14 +363,15 @@ LIMIT $1 OFFSET $2
 			&u.LastLoginAt,
 			&u.CreatedAt,
 			&u.UpdatedAt,
-			&roles,
+			&rolesRaw,
 		); err != nil {
 			return nil, 0, err
 		}
-		u.Roles = make([]user.Role, 0, len(roles))
-		for _, role := range roles {
-			u.Roles = append(u.Roles, user.Role(role))
+		roles, err := parseRolesJSON(rolesRaw)
+		if err != nil {
+			return nil, 0, fmt.Errorf("decode user roles: %w", err)
 		}
+		u.Roles = roles
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {
@@ -493,4 +523,25 @@ WHERE id = $1
 `
 	_, err := r.db.ExecContext(ctx, query, sessionID, time.Now().UTC())
 	return err
+}
+
+func parseRolesJSON(raw []byte) ([]user.Role, error) {
+	if len(raw) == 0 {
+		return []user.Role{}, nil
+	}
+
+	var roleKeys []string
+	if err := json.Unmarshal(raw, &roleKeys); err != nil {
+		return nil, err
+	}
+
+	roles := make([]user.Role, 0, len(roleKeys))
+	for _, key := range roleKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		roles = append(roles, user.Role(key))
+	}
+	return roles, nil
 }
