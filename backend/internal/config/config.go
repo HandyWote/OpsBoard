@@ -14,6 +14,7 @@ type Config struct {
 	Server ServerConfig
 	DB     DBConfig
 	Auth   AuthConfig
+	Campus CampusAuthConfig
 }
 
 // ServerConfig 控制 HTTP 服务以及中间件参数。
@@ -51,6 +52,15 @@ type AuthConfig struct {
 	AllowAutoUserCreation bool
 }
 
+// CampusAuthConfig 控制校园网认证。
+type CampusAuthConfig struct {
+	Enabled   bool
+	LoginURL  string
+	Operation string
+	Remember  string
+	Timeout   time.Duration
+}
+
 // Load 从环境变量构建配置，未设置的值使用默认值。
 func Load() (Config, error) {
 	cfg := Config{
@@ -83,6 +93,13 @@ func Load() (Config, error) {
 			RefreshTokenHashKey:   lookupString("AUTH_REFRESH_HASH_KEY", ""),
 			AllowAutoUserCreation: lookupBool("AUTH_ALLOW_AUTO_USER_CREATION", true),
 		},
+		Campus: CampusAuthConfig{
+			Enabled:   lookupBool("CAMPUS_AUTH_ENABLED", true),
+			LoginURL:  lookupString("CAMPUS_AUTH_URL", "http://a.stu.edu.cn/ac_portal/login.php"),
+			Operation: lookupString("CAMPUS_AUTH_OPERATION", "pwdLogin"),
+			Remember:  lookupString("CAMPUS_AUTH_REMEMBER", "0"),
+			Timeout:   lookupDuration("CAMPUS_AUTH_TIMEOUT", 10*time.Second),
+		},
 	}
 
 	if !strings.HasPrefix(cfg.Server.Addr, ":") && !strings.Contains(cfg.Server.Addr, ":") {
@@ -107,6 +124,10 @@ func Load() (Config, error) {
 
 	if cfg.Auth.RefreshTokenHashKey == "" {
 		return Config{}, errors.New("AUTH_REFRESH_HASH_KEY 未配置")
+	}
+
+	if strings.TrimSpace(cfg.Campus.LoginURL) == "" {
+		cfg.Campus.Enabled = false
 	}
 
 	return cfg, nil

@@ -17,7 +17,7 @@ type Registry struct {
 // NewRegistry 初始化服务依赖。
 func NewRegistry(cfg config.Config, repos repository.Registry, log *zap.Logger) Registry {
 	userService := NewUserService(cfg.Auth, repos.User, log)
-	authService := NewAuthService(cfg.Auth, repos.User, log)
+	authService := NewAuthService(cfg.Auth, cfg.Campus, repos.User, log)
 	taskService := NewTaskService(repos.Task, log)
 
 	return Registry{

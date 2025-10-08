@@ -21,6 +21,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type campusVerifier interface {
+	Verify(ctx context.Context, username, password string) error
+}
+
 // AuthMetadata 捕获发起请求的客户端信息。
 type AuthMetadata struct {
 	UserAgent string
@@ -43,17 +47,23 @@ type AccessTokenClaims struct {
 
 // AuthService 提供身份认证与令牌签发逻辑。
 type AuthService struct {
-	cfg  config.AuthConfig
-	repo repository.UserRepository
-	log  *zap.Logger
+	cfg    config.AuthConfig
+	repo   repository.UserRepository
+	campus campusVerifier
+	log    *zap.Logger
 }
 
 // NewAuthService 构造身份服务实例。
-func NewAuthService(cfg config.AuthConfig, repo repository.UserRepository, log *zap.Logger) *AuthService {
+func NewAuthService(cfg config.AuthConfig, campusCfg config.CampusAuthConfig, repo repository.UserRepository, log *zap.Logger) *AuthService {
 	if log == nil {
 		log = zap.NewNop()
 	}
-	return &AuthService{cfg: cfg, repo: repo, log: log}
+	return &AuthService{
+		cfg:    cfg,
+		repo:   repo,
+		campus: newCampusAuthenticator(campusCfg, log),
+		log:    log,
+	}
 }
 
 // Login 校验凭据并签发令牌。如配置允许，在首次登录时自动创建用户。
@@ -67,7 +77,18 @@ func (s *AuthService) Login(ctx context.Context, username, password string, meta
 	switch {
 	case err == nil:
 		// continue
-	case errors.Is(err, repository.ErrNotFound) && s.cfg.AllowAutoUserCreation:
+	case errors.Is(err, repository.ErrNotFound):
+		if !s.cfg.AllowAutoUserCreation || s.campus == nil {
+			return AuthResult{}, ErrInvalidCredentials
+		}
+
+		if campusErr := s.campus.Verify(ctx, username, password); campusErr != nil {
+			if errors.Is(campusErr, ErrInvalidCredentials) {
+				return AuthResult{}, campusErr
+			}
+			return AuthResult{}, fmt.Errorf("campus auth failed: %w", campusErr)
+		}
+
 		hash, hashErr := bcrypt.GenerateFromPassword([]byte(password), s.passwordCost())
 		if hashErr != nil {
 			return AuthResult{}, fmt.Errorf("hash password: %w", hashErr)
@@ -81,7 +102,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string, meta
 		if err != nil {
 			return AuthResult{}, fmt.Errorf("reload credential: %w", err)
 		}
-		s.log.Info("auto created user via login", zap.String("username", username), zap.String("user_id", created.ID.String()))
+		s.log.Info("campus authentication success, user created", zap.String("username", username), zap.String("user_id", created.ID.String()))
 	default:
 		return AuthResult{}, fmt.Errorf("lookup credential: %w", err)
 	}
