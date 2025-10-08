@@ -79,6 +79,20 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
 
   const isAdmin = computed(() => currentUser.role === 'admin')
 
+  const myPendingTasks = computed(() =>
+    tasks
+      .filter((task) => task.status === 'claimed' && task.assignee === currentUser.name)
+      .slice()
+      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+  )
+
+  const availableTasks = computed(() =>
+    tasks
+      .filter((task) => task.status === 'available')
+      .slice()
+      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+  )
+
   const filteredTasks = computed(() => {
     const term = keyword.value.trim().toLowerCase()
     const copy = tasks
@@ -184,6 +198,8 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
     submitting,
     publishForm,
     filteredTasks,
+    myPendingTasks,
+    availableTasks,
     priorityMeta,
     togglePublishPanel,
     updateFormField,

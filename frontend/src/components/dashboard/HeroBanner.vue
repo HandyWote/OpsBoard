@@ -7,19 +7,6 @@ defineProps({
 })
 </script>
 
-<template>
-  <section class="hero">
-    <div>
-      <h1>今日共有 {{ taskCount }} 个任务等待认领</h1>
-      <p>按优先级和截止时间排序，指派后请在 SLA 内完成并回传复盘。</p>
-    </div>
-    <div class="hero__cta">
-      <button class="hero__primary" type="button">快速筛选高优任务</button>
-      <button class="hero__secondary" type="button">查看执行准则</button>
-    </div>
-  </section>
-</template>
-
 <style scoped>
 .hero {
   width: 100%;
