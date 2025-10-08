@@ -60,6 +60,6 @@ const contentClass = computed(() => {
 }
 
 .app-shell__content--wide {
-  max-width: 1080px;
+  max-width: 1280px;
 }
 </style>
