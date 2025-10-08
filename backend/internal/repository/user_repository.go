@@ -115,6 +115,12 @@ func (r *userRepository) CreateWithPassword(ctx context.Context, username, passw
 	}
 	defer tx.Rollback()
 
+	const firstUserQuery = `SELECT COUNT(*) = 0 FROM users`
+	var isFirstUser bool
+	if err := tx.QueryRowContext(ctx, firstUserQuery).Scan(&isFirstUser); err != nil {
+		return user.User{}, err
+	}
+
 	now := time.Now().UTC()
 	id := uuid.New()
 	displayName := username
@@ -152,18 +158,24 @@ VALUES ($1, $2, $3, $4, $5, $5, $5)
 
 	const assignRole = `
 INSERT INTO user_roles (user_id, role_key, assigned_at)
-VALUES ($1, 'member', $2)
+VALUES ($1, $2, $3)
 ON CONFLICT DO NOTHING
 `
-	if _, err := tx.ExecContext(ctx, assignRole, u.ID, now); err != nil {
-		return user.User{}, err
+	rolesToAssign := []user.Role{user.RoleMember}
+	if isFirstUser {
+		rolesToAssign = append(rolesToAssign, user.RoleAdmin)
+	}
+	for _, role := range rolesToAssign {
+		if _, err := tx.ExecContext(ctx, assignRole, u.ID, string(role), now); err != nil {
+			return user.User{}, err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return user.User{}, err
 	}
 
-	u.Roles = []user.Role{user.RoleMember}
+	u.Roles = rolesToAssign
 	return u, nil
 }
 
