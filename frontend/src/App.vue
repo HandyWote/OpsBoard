@@ -8,6 +8,9 @@ const contentClass = computed(() => {
   if (route.name === 'home') {
     return 'app-shell__content app-shell__content--wide'
   }
+  if (route.name === 'profile') {
+    return 'app-shell__content app-shell__content--medium'
+  }
   return 'app-shell__content app-shell__content--compact'
 })
 </script>
@@ -61,5 +64,9 @@ const contentClass = computed(() => {
 
 .app-shell__content--wide {
   max-width: 1280px;
+}
+
+.app-shell__content--medium {
+  max-width: 980px;
 }
 </style>

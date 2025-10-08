@@ -10,7 +10,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['toggle-publish', 'open-admin'])
+const emit = defineEmits(['toggle-publish', 'open-admin', 'open-profile'])
 
 const handlePublish = () => {
   if (!props.isAdmin) return
@@ -35,6 +35,10 @@ const handlePublish = () => {
       >
         <span>发布任务</span>
         <small v-if="!isAdmin">仅管理员可发布</small>
+      </button>
+
+      <button class="topbar__profile" type="button" @click="emit('open-profile')">
+        <span class="topbar__profile-label">我的</span>
       </button>
 
       <button
@@ -169,6 +173,30 @@ const handlePublish = () => {
 .topbar__manage-meta {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.78);
+}
+
+.topbar__profile {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.topbar__profile:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+}
+
+.topbar__profile-label {
+  font-size: 14px;
+  letter-spacing: 0.4px;
 }
 
 @media (max-width: 768px) {

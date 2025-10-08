@@ -1,4 +1,5 @@
 import { computed, reactive, ref } from 'vue'
+import { useCurrentUser } from './useCurrentUser.js'
 
 const priorityOrder = {
   critical: 1,
@@ -88,17 +89,20 @@ const initialTasks = [
 export function useTaskBoard(user = { name: '', role: 'member' }) {
   const accounts = reactive(accountDirectory.map((account) => ({ ...account })))
 
+  const { mutableProfile: currentUser, updateProfile, setRole } = useCurrentUser()
+
   const seedAccount =
     (user &&
       accounts.find((account) => account.id === user.id || account.name === user.name)) ||
+    accounts.find((account) => account.id === currentUser.id) ||
     accounts[0]
 
-  const currentUser = reactive({
-    id: seedAccount?.id ?? `user-${Date.now()}`,
-    name: seedAccount?.name ?? user.name ?? '',
-    role: seedAccount?.role ?? user.role ?? 'member',
-    email: seedAccount?.email ?? user.email ?? '',
-    teams: seedAccount?.teams ?? user.teams ?? []
+  updateProfile({
+    id: seedAccount?.id ?? currentUser.id,
+    name: seedAccount?.name ?? user.name ?? currentUser.name ?? '',
+    role: seedAccount?.role ?? user.role ?? currentUser.role ?? 'member',
+    email: seedAccount?.email ?? user.email ?? currentUser.email ?? '',
+    teams: seedAccount?.teams ?? user.teams ?? currentUser.teams ?? []
   })
 
   const sortKey = ref('priority')
@@ -147,7 +151,7 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
     }
 
     if (currentUser.id === accountId) {
-      currentUser.role = target.role
+      setRole(target.role)
     }
 
     return target.role

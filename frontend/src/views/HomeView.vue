@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import WorkspaceTopbar from '../components/layout/WorkspaceTopbar.vue'
 import HeroBanner from '../components/dashboard/HeroBanner.vue'
 import TaskFilterBar from '../components/dashboard/TaskFilterBar.vue'
@@ -33,6 +34,7 @@ const {
 } = useTaskBoard({ name: '林运维', role: 'admin' })
 
 const showAccountManager = ref(false)
+const router = useRouter()
 
 const handleFieldUpdate = ({ field, value }) => {
   updateFormField(field, value)
@@ -53,6 +55,10 @@ const handleToggleAdmin = (accountId) => {
     showAccountManager.value = false
   }
 }
+
+const handleOpenProfile = () => {
+  router.push({ name: 'profile' })
+}
 </script>
 
 <template>
@@ -62,6 +68,7 @@ const handleToggleAdmin = (accountId) => {
       :is-admin="isAdmin"
       @toggle-publish="togglePublishPanel"
       @open-admin="handleOpenAdminPanel"
+      @open-profile="handleOpenProfile"
     />
 
     <div class="workspace-body">
