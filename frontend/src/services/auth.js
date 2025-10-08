@@ -1,25 +1,34 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+import { clearTokens, getRefreshToken, requestJSON, setTokens } from './http.js'
+import { request } from './http.js'
 
-export async function login(payload) {
-  const response = await fetch(`${API_BASE_URL}/api/login`, {
+export async function login(credentials) {
+  const data = await requestJSON('/api/v1/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
+    body: credentials,
+    auth: false
   })
 
-  let data = { success: false }
-  try {
-    data = await response.json()
-  } catch (error) {
-    // ignore json parse error and fall back to default message handling
-  }
-
-  if (!response.ok) {
-    const message = data.message || '登录失败，请稍后重试'
-    throw new Error(message)
+  if (data?.accessToken && data?.refreshToken) {
+    setTokens({
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken
+    })
   }
 
   return data
+}
+
+export async function logout() {
+  const token = getRefreshToken()
+  try {
+    await request('/api/v1/auth/logout', {
+      method: 'POST',
+      body: { refreshToken: token },
+      auth: false
+    })
+  } catch (error) {
+    // ignore network errors during logout
+  } finally {
+    clearTokens()
+  }
 }

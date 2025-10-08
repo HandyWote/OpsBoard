@@ -111,9 +111,9 @@ func (r *userRepository) CreateWithPassword(ctx context.Context, username, passw
 	displayName := username
 
 	const insertUser = `
-INSERT INTO users (id, username, display_name, status, created_at, updated_at)
-VALUES ($1, $2, $3, 'active', $4, $4)
-RETURNING id, username, display_name, email, headline, bio, avatar_url, status, last_login_at, created_at, updated_at
+INSERT INTO users (id, username, display_name, email, headline, bio, avatar_url, status, created_at, updated_at)
+VALUES ($1, $2, $3, NULL, NULL, NULL, NULL, 'active', $4, $4)
+RETURNING id, username, display_name, COALESCE(email, ''), COALESCE(headline, ''), COALESCE(bio, ''), COALESCE(avatar_url, ''), status, last_login_at, created_at, updated_at
 `
 	var u user.User
 	err = tx.QueryRowContext(ctx, insertUser, id, username, displayName, now).Scan(

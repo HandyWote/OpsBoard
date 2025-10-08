@@ -24,6 +24,9 @@ var migrationStatements = []string{
 	);`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users (LOWER(username));`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users (LOWER(email)) WHERE email IS NOT NULL;`,
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS headline TEXT;`,
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT;`,
+	`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`,
 
 	// 密码表
 	`CREATE TABLE IF NOT EXISTS user_credentials (

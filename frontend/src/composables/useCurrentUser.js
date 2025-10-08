@@ -1,14 +1,16 @@
 import { reactive, readonly } from 'vue'
 
 const profileState = reactive({
-  id: 'ops-admin',
-  name: '林运维',
-  role: 'admin',
-  email: 'lin.ops@example.com',
-  teams: ['校园网络', '应急响应'],
-  headline: '运维调度管理员',
-  bio: '负责校园网络与应急响应调度，关注稳定性与体验的平衡。',
-  avatarText: '林'
+  id: '',
+  username: '',
+  name: '',
+  email: '',
+  roles: [],
+  role: 'member',
+  teams: [],
+  headline: '',
+  bio: '',
+  avatarText: '用'
 })
 
 export function useCurrentUser() {
@@ -25,14 +27,45 @@ export function useCurrentUser() {
     }
   }
 
+  const hydrate = (user = {}) => {
+    profileState.id = user.id || ''
+    profileState.username = user.username || ''
+    profileState.name = user.displayName || user.name || ''
+    profileState.email = user.email || ''
+    profileState.roles = Array.isArray(user.roles) ? [...user.roles] : []
+    profileState.role = profileState.roles.includes('admin') ? 'admin' : 'member'
+    profileState.teams = Array.isArray(user.teams) ? [...user.teams] : []
+    profileState.headline = user.headline || ''
+    profileState.bio = user.bio || ''
+    profileState.avatarText = profileState.name ? profileState.name.slice(0, 1) : '用'
+  }
+
+  const resetProfile = () => {
+    profileState.id = ''
+    profileState.username = ''
+    profileState.name = ''
+    profileState.email = ''
+    profileState.roles = []
+    profileState.role = 'member'
+    profileState.teams = []
+    profileState.headline = ''
+    profileState.bio = ''
+    profileState.avatarText = '用'
+  }
+
   const setRole = (role) => {
     profileState.role = role
+    if (!profileState.roles.includes(role)) {
+      profileState.roles = [...profileState.roles.filter((item) => item !== role), role]
+    }
   }
 
   return {
     profile: readonly(profileState),
     mutableProfile: profileState,
     updateProfile,
+    hydrate,
+    resetProfile,
     setRole
   }
 }

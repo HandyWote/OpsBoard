@@ -1,10 +1,12 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
+import { changePassword, fetchCurrentUser, updateProfile as updateProfileRequest } from '../services/users.js'
+import { isAuthenticated } from '../services/http.js'
 
 const router = useRouter()
-const { profile, updateProfile } = useCurrentUser()
+const { profile, updateProfile, hydrate } = useCurrentUser()
 
 const profileForm = reactive({
   name: '',
@@ -20,6 +22,7 @@ const passwordForm = reactive({
 
 const savingProfile = ref(false)
 const profileSuccess = ref(false)
+const profileError = ref('')
 const savingSecurity = ref(false)
 const securityMessage = ref('')
 const securityError = ref('')
@@ -55,34 +58,43 @@ const canSubmitPassword = computed(() => {
   )
 })
 
-const handleProfileSubmit = () => {
+const handleProfileSubmit = async () => {
   if (!canSubmitProfile.value) return
 
   savingProfile.value = true
   profileSuccess.value = false
+  profileError.value = ''
   const payload = {
-    name: profileForm.name.trim(),
+    displayName: profileForm.name.trim(),
     headline: profileForm.headline.trim(),
     bio: profileForm.bio.trim()
   }
 
-  setTimeout(() => {
-    updateProfile(payload)
+  try {
+    const updated = await updateProfileRequest(payload)
+    if (updated) {
+      hydrate(updated)
+      profileSuccess.value = true
+      setTimeout(() => {
+        profileSuccess.value = false
+      }, 2400)
+    }
+  } catch (error) {
+    profileSuccess.value = false
+    profileError.value = error.message || '资料保存失败'
+  } finally {
     savingProfile.value = false
-    profileSuccess.value = true
-    setTimeout(() => {
-      profileSuccess.value = false
-    }, 2400)
-  }, 420)
+  }
 }
 
 const resetProfileForm = () => {
   profileForm.name = profile.name ?? ''
   profileForm.headline = profile.headline ?? ''
   profileForm.bio = profile.bio ?? ''
+  profileError.value = ''
 }
 
-const handleSecuritySubmit = () => {
+const handleSecuritySubmit = async () => {
   if (!canSubmitPassword.value) {
     securityError.value = '请填写完整并确保新密码两次输入一致。'
     return
@@ -92,16 +104,23 @@ const handleSecuritySubmit = () => {
   securityError.value = ''
   securityMessage.value = ''
 
-  setTimeout(() => {
+  try {
+    await changePassword({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword
+    })
     passwordForm.currentPassword = ''
     passwordForm.newPassword = ''
     passwordForm.confirmPassword = ''
-    savingSecurity.value = false
     securityMessage.value = '密码已更新'
     setTimeout(() => {
       securityMessage.value = ''
     }, 2400)
-  }, 520)
+  } catch (error) {
+    securityError.value = error.message || '密码更新失败'
+  } finally {
+    savingSecurity.value = false
+  }
 }
 
 const handleCancelSecurity = () => {
@@ -111,6 +130,24 @@ const handleCancelSecurity = () => {
   securityError.value = ''
   securityMessage.value = ''
 }
+
+onMounted(async () => {
+  try {
+    const latest = await fetchCurrentUser()
+    if (latest) {
+      hydrate(latest)
+      resetProfileForm()
+    }
+  } catch (error) {
+    /* ignore */
+  }
+})
+
+watchEffect(() => {
+  if (!isAuthenticated()) {
+    router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+  }
+})
 </script>
 
 <template>
@@ -158,6 +195,9 @@ const handleCancelSecurity = () => {
             </div>
             <transition name="fade">
               <span v-if="profileSuccess" class="status-pill status-pill--success">已保存</span>
+            </transition>
+            <transition name="fade">
+              <span v-if="profileError" class="status-pill status-pill--danger">{{ profileError }}</span>
             </transition>
           </div>
 

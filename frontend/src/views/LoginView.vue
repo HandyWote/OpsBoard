@@ -2,6 +2,8 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { login } from '../services/auth.js'
+import { useCurrentUser } from '../composables/useCurrentUser.js'
+import { fetchCurrentUser } from '../services/users.js'
 
 const form = reactive({
   username: '',
@@ -31,6 +33,7 @@ const feedback = reactive({
 const loading = ref(false)
 const visible = ref(false)
 const router = useRouter()
+const { hydrate, resetProfile } = useCurrentUser()
 
 const canSubmit = computed(() => !loading.value && !errors.username && !errors.password && form.username && form.password)
 
@@ -77,22 +80,33 @@ const submit = async () => {
   resetFeedback()
 
   try {
+    resetProfile()
+
     const response = await login({
       username: form.username.trim(),
       password: form.password
     })
 
-    if (response.success) {
-      feedback.type = 'success'
-      feedback.message = response.message || '登录成功，正在为您跳转...'
-      await nextTick()
-      setTimeout(() => {
-        router.push({ name: 'home' })
-      }, 1000)
+    if (response?.user) {
+      hydrate(response.user)
     } else {
-      feedback.type = 'error'
-      feedback.message = response.message || '用户名或密码错误'
+      const userProfile = await fetchCurrentUser().catch(() => null)
+      if (userProfile) {
+        hydrate(userProfile)
+      }
     }
+
+    feedback.type = 'success'
+    feedback.message = '登录成功，正在为您跳转...'
+    const redirect = router.currentRoute.value?.query?.redirect
+    await nextTick()
+    setTimeout(() => {
+      if (redirect && typeof redirect === 'string') {
+        router.push(redirect)
+      } else {
+        router.push({ name: 'home' })
+      }
+    }, 600)
   } catch (error) {
     feedback.type = 'error'
     feedback.message = error.message || '服务暂时不可用，请稍后重试'

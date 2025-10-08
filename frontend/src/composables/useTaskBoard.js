@@ -1,12 +1,7 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrentUser } from './useCurrentUser.js'
-
-const priorityOrder = {
-  critical: 1,
-  high: 2,
-  medium: 3,
-  low: 4
-}
+import { fetchCurrentUser, listAccounts, toggleAdmin } from '../services/users.js'
+import { claimTask, createTask, fetchTasks, releaseTask } from '../services/tasks.js'
 
 const priorityMeta = {
   critical: { label: '特急', tone: 'var(--danger)' },
@@ -15,101 +10,21 @@ const priorityMeta = {
   low: { label: '低', tone: 'var(--muted)' }
 }
 
-const accountDirectory = [
-  {
-    id: 'ops-admin',
-    name: '林运维',
-    role: 'admin',
-    email: 'lin.ops@example.com',
-    teams: ['校园网络', '应急响应']
-  },
-  {
-    id: 'ops-dev',
-    name: '周巡检',
-    role: 'member',
-    email: 'zhou.patrol@example.com',
-    teams: ['自动化工具', '巡检保障']
-  },
-  {
-    id: 'ops-ops',
-    name: '唐值班',
-    role: 'member',
-    email: 'tang.ops@example.com',
-    teams: ['安全审计', '流程治理']
-  }
-]
+export function useTaskBoard() {
+  const { mutableProfile: currentUser, hydrate, setRole } = useCurrentUser()
 
-const initialTasks = [
-  {
-    id: 'T-1024',
-    title: '校园网节点流量突增排查',
-    summary: '定位晚高峰教室区域流量异常，补充监控指标并撰写复盘。',
-    reward: 220,
-    deadline: '2025-02-18T18:00:00+08:00',
-    priority: 'critical',
-    tags: ['网络', '应急'],
-    status: 'available',
-    assignee: null
-  },
-  {
-    id: 'T-1018',
-    title: '公共机房巡检自动化脚本优化',
-    summary: '更新巡检脚本以兼容新批次服务器，补充告警推送配置。',
-    reward: 150,
-    deadline: '2025-02-25T12:00:00+08:00',
-    priority: 'high',
-    tags: ['自动化', '脚本'],
-    status: 'claimed',
-    assignee: 'Jerry'
-  },
-  {
-    id: 'T-0991',
-    title: '知识库：应急通信回落流程整理',
-    summary: '整理 2024 年紧急回落流程并绘制流程图，更新到知识库。',
-    reward: 120,
-    deadline: '2025-03-02T09:00:00+08:00',
-    priority: 'medium',
-    tags: ['文档', '知识库'],
-    status: 'available',
-    assignee: null
-  },
-  {
-    id: 'T-0977',
-    title: 'Nginx 配置管理策略梳理',
-    summary: '收敛 Nginx 配置，输出灰度规范，并同步给发布系统。',
-    reward: 180,
-    deadline: '2025-02-23T20:00:00+08:00',
-    priority: 'high',
-    tags: ['发布', '架构'],
-    status: 'available',
-    assignee: null
-  }
-]
-
-export function useTaskBoard(user = { name: '', role: 'member' }) {
-  const accounts = reactive(accountDirectory.map((account) => ({ ...account })))
-
-  const { mutableProfile: currentUser, updateProfile, setRole } = useCurrentUser()
-
-  const seedAccount =
-    (user &&
-      accounts.find((account) => account.id === user.id || account.name === user.name)) ||
-    accounts.find((account) => account.id === currentUser.id) ||
-    accounts[0]
-
-  updateProfile({
-    id: seedAccount?.id ?? currentUser.id,
-    name: seedAccount?.name ?? user.name ?? currentUser.name ?? '',
-    role: seedAccount?.role ?? user.role ?? currentUser.role ?? 'member',
-    email: seedAccount?.email ?? user.email ?? currentUser.email ?? '',
-    teams: seedAccount?.teams ?? user.teams ?? currentUser.teams ?? []
-  })
+  const tasks = ref([])
+  const totalTasks = ref(0)
+  const loadingTasks = ref(false)
+  const loadingUser = ref(false)
+  const accounts = ref([])
+  const loadingAccounts = ref(false)
 
   const sortKey = ref('priority')
   const keyword = ref('')
+
   const showPublishPanel = ref(false)
   const submitting = ref(false)
-  const tasks = reactive(initialTasks.slice())
 
   const publishForm = reactive({
     title: '',
@@ -121,80 +36,40 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
 
   const isAdmin = computed(() => currentUser.role === 'admin')
 
+  const adminCount = computed(() => accounts.value.filter((account) => account.role === 'admin').length)
+
   const myPendingTasks = computed(() =>
-    tasks
+    tasks.value
       .filter((task) => task.status === 'claimed' && task.assignee === currentUser.name)
       .slice()
-      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      .sort((a, b) => new Date(a.deadline || 0) - new Date(b.deadline || 0))
   )
 
   const availableTasks = computed(() =>
-    tasks
+    tasks.value
       .filter((task) => task.status === 'available')
       .slice()
-      .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+      .sort((a, b) => new Date(a.deadline || 0) - new Date(b.deadline || 0))
   )
-
-  const adminCount = computed(() => accounts.filter((account) => account.role === 'admin').length)
-
-  const toggleAdminForAccount = (accountId) => {
-    const target = accounts.find((account) => account.id === accountId)
-    if (!target) return currentUser.role
-
-    if (target.role === 'admin') {
-      if (adminCount.value <= 1) {
-        return target.role
-      }
-      target.role = 'member'
-    } else {
-      target.role = 'admin'
-    }
-
-    if (currentUser.id === accountId) {
-      setRole(target.role)
-    }
-
-    return target.role
-  }
 
   const filteredTasks = computed(() => {
     const term = keyword.value.trim().toLowerCase()
-    const copy = tasks
-      .filter((task) => {
-        if (!term) return true
-        return `${task.id} ${task.title} ${task.summary}`.toLowerCase().includes(term)
-      })
-      .slice()
-
-    const availableFirst = (task) => (task.status === 'available' ? 0 : task.status === 'claimed' ? 1 : 2)
-
-    if (sortKey.value === 'priority') {
-      return copy.sort((a, b) => {
-        const statusCompare = availableFirst(a) - availableFirst(b)
-        if (statusCompare !== 0) return statusCompare
-        return (priorityOrder[a.priority] || 5) - (priorityOrder[b.priority] || 5)
-      })
-    }
-
-    if (sortKey.value === 'deadline') {
-      return copy.sort((a, b) => {
-        const statusCompare = availableFirst(a) - availableFirst(b)
-        if (statusCompare !== 0) return statusCompare
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-      })
-    }
-
-    return copy
+    if (!term) return tasks.value
+    return tasks.value.filter((task) => `${task.id} ${task.title} ${task.summary}`.toLowerCase().includes(term))
   })
 
-  const togglePublishPanel = () => {
-    if (!isAdmin.value && !showPublishPanel.value) {
-      return
+  const updatePublishForm = (field, value) => {
+    if (Object.prototype.hasOwnProperty.call(publishForm, field)) {
+      publishForm[field] = value
     }
+  }
+
+  const togglePublishPanel = () => {
+    if (!isAdmin.value && !showPublishPanel.value) return
     showPublishPanel.value = !showPublishPanel.value
   }
 
-  const resetForm = () => {
+  const resetPublishForm = () => {
     publishForm.title = ''
     publishForm.reward = ''
     publishForm.deadline = ''
@@ -202,77 +77,211 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
     publishForm.description = ''
   }
 
-  const updateFormField = (field, value) => {
-    if (Object.prototype.hasOwnProperty.call(publishForm, field)) {
-      publishForm[field] = value
+  const mapTaskFromApi = (item) => {
+    const status = item.status === 'published' ? 'available' : item.status
+    const assigneeName = item.currentAssignee?.username || ''
+    return {
+      id: item.id,
+      title: item.title,
+      summary: item.descriptionPlain || '',
+      reward: item.bounty ?? 0,
+      deadline: item.deadline,
+      priority: item.priority || 'medium',
+      tags: Array.isArray(item.tags) ? item.tags.slice() : [],
+      status,
+      assignee: assigneeName,
+      assigneeId: item.currentAssignee?.userId || '',
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
     }
   }
 
-  const updateFormDescription = (value) => {
-    publishForm.description = value
+  const loadTasks = async () => {
+    loadingTasks.value = true
+    try {
+      const data = await fetchTasks({
+        keyword: keyword.value.trim(),
+        sort: sortKey.value
+      })
+      const items = Array.isArray(data?.items) ? data.items : []
+      tasks.value = items.map(mapTaskFromApi)
+      totalTasks.value = data?.total ?? items.length
+    } catch (error) {
+      console.error('加载任务失败', error)
+    } finally {
+      loadingTasks.value = false
+    }
   }
 
-  const handleAccept = (task) => {
-    if (task.status !== 'available') return
-    task.status = 'claimed'
-    task.assignee = currentUser.name
+  const loadCurrentUser = async () => {
+    loadingUser.value = true
+    try {
+      const data = await fetchCurrentUser()
+      hydrate(data || {})
+    } catch (error) {
+      console.error('获取用户信息失败', error)
+    } finally {
+      loadingUser.value = false
+    }
   }
 
-  const handleRelease = (task) => {
-    if (task.assignee !== currentUser.name) return
-    task.status = 'available'
-    task.assignee = null
+  const loadAccounts = async () => {
+    if (!isAdmin.value) {
+      accounts.value = []
+      return
+    }
+
+    loadingAccounts.value = true
+    try {
+      const data = await listAccounts({ page: 1, pageSize: 50 })
+      const items = Array.isArray(data?.items) ? data.items : []
+      accounts.value = items.map((item) => ({
+        id: item.id,
+        name: item.displayName || item.name || item.username || '',
+        role: item.roles?.includes('admin') ? 'admin' : 'member',
+        email: item.email || '',
+        teams: item.teams || []
+      }))
+    } catch (error) {
+      console.error('加载账号列表失败', error)
+    } finally {
+      loadingAccounts.value = false
+    }
   }
 
-  const submitTask = () => {
-    const plainText = publishForm.description.replace(/<[^>]+>/g, '').trim()
-    if (!publishForm.title.trim() || !plainText) {
+  const initialize = async () => {
+    await Promise.all([loadCurrentUser(), loadTasks()])
+    await loadAccounts()
+  }
+
+  const submitTask = async () => {
+    if (!publishForm.title.trim() || !publishForm.description.trim()) {
       return
     }
 
     submitting.value = true
-    setTimeout(() => {
-      tasks.unshift({
-        id: `T-${Math.floor(Math.random() * 9000 + 1000)}`,
+    try {
+      const payload = {
         title: publishForm.title.trim(),
-        summary: plainText.slice(0, 140) || '新任务',
-        reward: Number(publishForm.reward) || 0,
-        deadline: publishForm.deadline || new Date().toISOString(),
+        descriptionHtml: publishForm.description,
+        bounty: Number(publishForm.reward) || 0,
         priority: 'medium',
+        deadline: publishForm.deadline ? new Date(publishForm.deadline).toISOString() : null,
         tags: publishForm.tags
           .split(',')
           .map((tag) => tag.trim())
           .filter(Boolean),
-        status: 'available',
-        assignee: null
-      })
+        publish: true
+      }
 
-      resetForm()
-      submitting.value = false
+      await createTask(payload)
+      resetPublishForm()
       showPublishPanel.value = false
-    }, 450)
+      await loadTasks()
+    } catch (error) {
+      console.error('发布任务失败', error)
+    } finally {
+      submitting.value = false
+    }
   }
+
+  const handleAccept = async (task) => {
+    try {
+      await claimTask(task.id)
+      await loadTasks()
+    } catch (error) {
+      console.error('认领任务失败', error)
+    }
+  }
+
+  const handleRelease = async (task) => {
+    try {
+      await releaseTask(task.id)
+      await loadTasks()
+    } catch (error) {
+      console.error('释放任务失败', error)
+    }
+  }
+
+  const toggleAdminForAccount = async (accountId) => {
+    const target = accounts.value.find((item) => item.id === accountId)
+    if (!target) return currentUser.role
+
+    const grant = target.role !== 'admin'
+    try {
+      await toggleAdmin(accountId, grant)
+      target.role = grant ? 'admin' : 'member'
+      if (currentUser.id === accountId) {
+        setRole(target.role)
+      }
+      await loadAccounts()
+      return target.role
+    } catch (error) {
+      console.error('切换管理员权限失败', error)
+      return target.role
+    }
+  }
+
+  let keywordDebounce = null
+  watch(
+    () => keyword.value,
+    () => {
+      if (keywordDebounce) {
+        clearTimeout(keywordDebounce)
+      }
+      keywordDebounce = setTimeout(() => {
+        loadTasks()
+      }, 350)
+    }
+  )
+
+  watch(
+    () => sortKey.value,
+    () => {
+      loadTasks()
+    }
+  )
+
+  watch(
+    () => isAdmin.value,
+    (value) => {
+      if (value) {
+        loadAccounts()
+      } else {
+        accounts.value = []
+      }
+    }
+  )
+
+  onMounted(() => {
+    initialize()
+  })
 
   return {
     currentUser,
     isAdmin,
+    tasks: filteredTasks,
+    priorityMeta,
     sortKey,
     keyword,
+    totalTasks,
+    loadingTasks,
+    loadingUser,
+    loadingAccounts,
     showPublishPanel,
     submitting,
     publishForm,
-    filteredTasks,
     myPendingTasks,
     availableTasks,
     accounts,
     adminCount,
-    priorityMeta,
+    updateFormField: updatePublishForm,
+    updateFormDescription: (value) => updatePublishForm('description', value),
     togglePublishPanel,
-    updateFormField,
-    updateFormDescription,
+    submitTask,
     handleAccept,
     handleRelease,
-    submitTask,
-    toggleAdminForAccount
+    toggleAdminForAccount,
+    initialize
   }
 }

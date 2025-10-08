@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import WorkspaceTopbar from '../components/layout/WorkspaceTopbar.vue'
 import HeroBanner from '../components/dashboard/HeroBanner.vue'
@@ -9,6 +9,7 @@ import PublishPanel from '../components/dashboard/PublishPanel.vue'
 import UserSidebar from '../components/dashboard/UserSidebar.vue'
 import AccountManagerPanel from '../components/dashboard/AccountManagerPanel.vue'
 import { useTaskBoard } from '../composables/useTaskBoard.js'
+import { isAuthenticated } from '../services/http.js'
 
 const {
   currentUser,
@@ -18,7 +19,7 @@ const {
   showPublishPanel,
   submitting,
   publishForm,
-  filteredTasks,
+  tasks: boardTasks,
   myPendingTasks,
   availableTasks,
   accounts,
@@ -31,7 +32,7 @@ const {
   handleRelease,
   submitTask,
   toggleAdminForAccount
-} = useTaskBoard({ name: '林运维', role: 'admin' })
+} = useTaskBoard()
 
 const showAccountManager = ref(false)
 const router = useRouter()
@@ -49,8 +50,8 @@ const handleOpenAdminPanel = () => {
   showAccountManager.value = true
 }
 
-const handleToggleAdmin = (accountId) => {
-  const nextRole = toggleAdminForAccount(accountId)
+const handleToggleAdmin = async (accountId) => {
+  const nextRole = await toggleAdminForAccount(accountId)
   if (accountId === currentUser.id && nextRole !== 'admin') {
     showAccountManager.value = false
   }
@@ -59,6 +60,12 @@ const handleToggleAdmin = (accountId) => {
 const handleOpenProfile = () => {
   router.push({ name: 'profile' })
 }
+
+watchEffect(() => {
+  if (!isAuthenticated()) {
+    router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
+  }
+})
 </script>
 
 <template>
@@ -73,7 +80,7 @@ const handleOpenProfile = () => {
 
     <div class="workspace-body">
       <div class="primary-pane">
-        <HeroBanner :task-count="filteredTasks.length" />
+        <HeroBanner :task-count="boardTasks.length" />
 
         <TaskFilterBar
           :keyword="keyword"
@@ -83,7 +90,7 @@ const handleOpenProfile = () => {
         />
 
         <TaskBoard
-          :tasks="filteredTasks"
+          :tasks="boardTasks"
           :priority-meta="priorityMeta"
           :current-user-name="currentUser.name"
           @accept="handleAccept"
