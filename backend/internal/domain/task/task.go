@@ -21,6 +21,7 @@ const (
 	StatusDraft     Status = "draft"
 	StatusAvailable Status = "available"
 	StatusClaimed   Status = "claimed"
+	StatusSubmitted Status = "submitted"
 	StatusCompleted Status = "completed"
 	StatusArchived  Status = "archived"
 )

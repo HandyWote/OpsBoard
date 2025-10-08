@@ -16,6 +16,8 @@ const props = defineProps({
   }
 })
 
+const emit = defineEmits(['submit-task', 'verify-task'])
+
 const initials = computed(() => (props.user.name ? props.user.name.slice(0, 1) : '用'))
 const pendingPreview = computed(() => props.pendingTasks.slice(0, 3))
 const availablePreview = computed(() => props.availableTasks.slice(0, 3))
@@ -27,15 +29,27 @@ const roleLabel = computed(() => {
 })
 
 const formatDeadline = (deadline) => {
-  try {
-    return new Date(deadline).toLocaleString('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch (err) {
-    return deadline
+  if (!deadline) return '未设定'
+  const date = new Date(deadline)
+  if (Number.isNaN(date.getTime())) return '未设定'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const isReviewTask = (task) => task.pendingKind === 'review'
+const actionLabel = (task) => (isReviewTask(task) ? '验收任务' : '完成任务')
+const statusLabel = (task) => (isReviewTask(task) ? '待验收' : '待执行')
+const reviewHint = (task) => (isReviewTask(task) ? `执行人：${task.assignee || '未指派'}` : '')
+
+const handleTaskAction = (task) => {
+  if (isReviewTask(task)) {
+    emit('verify-task', task)
+  } else {
+    emit('submit-task', task)
   }
 }
 </script>
@@ -52,7 +66,7 @@ const formatDeadline = (deadline) => {
 
     <section class="quick-stats">
       <div class="stat">
-        <span class="label">待执行任务</span>
+        <span class="label">待处理任务</span>
         <span class="value">{{ pendingTasks.length }}</span>
       </div>
       <div class="stat">
@@ -64,12 +78,17 @@ const formatDeadline = (deadline) => {
     <section class="task-block">
       <h3>我的待办</h3>
       <ol v-if="pendingTasks.length" class="task-list">
-        <li v-for="task in pendingPreview" :key="task.id">
-          <p class="task-title">{{ task.title }}</p>
-          <p class="task-deadline">截止：{{ formatDeadline(task.deadline) }}</p>
+        <li v-for="task in pendingPreview" :key="task.id" class="task-item">
+          <div class="task-info">
+            <span class="task-status" :class="{ 'task-status--review': isReviewTask(task) }">{{ statusLabel(task) }}</span>
+            <p class="task-title">{{ task.title }}</p>
+            <p class="task-deadline">截止：{{ formatDeadline(task.deadline) }}</p>
+            <p v-if="reviewHint(task)" class="task-meta">{{ reviewHint(task) }}</p>
+          </div>
+          <button class="task-action" type="button" @click="handleTaskAction(task)">{{ actionLabel(task) }}</button>
         </li>
       </ol>
-      <p v-else class="empty">当前没有待执行任务</p>
+      <p v-else class="empty">当前没有待处理任务</p>
       <p v-if="pendingTasks.length > pendingPreview.length" class="more">
         还有 {{ pendingTasks.length - pendingPreview.length }} 项待处理
       </p>
@@ -190,6 +209,39 @@ const formatDeadline = (deadline) => {
   list-style: none;
 }
 
+.task-item {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.task-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.task-status {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.task-status--review {
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.12);
+}
+
 .task-title {
   margin: 0;
   font-size: 14px;
@@ -200,6 +252,34 @@ const formatDeadline = (deadline) => {
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--frost-text-secondary);
+}
+
+.task-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--frost-text-secondary);
+}
+
+.task-action {
+  align-self: center;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.task-action:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.task-action:active {
+  transform: translateY(0);
 }
 
 .empty {

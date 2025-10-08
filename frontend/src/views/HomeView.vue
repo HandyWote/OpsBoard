@@ -30,6 +30,8 @@ const {
   updateFormDescription,
   handleAccept,
   handleRelease,
+  handleSubmitCompletion,
+  handleVerifyCompletion,
   submitTask,
   toggleAdminForAccount
 } = useTaskBoard()
@@ -112,6 +114,8 @@ watchEffect(() => {
         :user="currentUser"
         :pending-tasks="myPendingTasks"
         :available-tasks="availableTasks"
+        @submit-task="handleSubmitCompletion"
+        @verify-task="handleVerifyCompletion"
       />
     </div>
 

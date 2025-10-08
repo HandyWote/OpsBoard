@@ -128,6 +128,12 @@ var migrationStatements = []string{
 
 	// 任务全文检索索引（使用 simple 配置，兼容默认 PostgreSQL）
 	`CREATE INDEX IF NOT EXISTS idx_tasks_search ON tasks USING GIN (to_tsvector('simple', title || ' ' || description_plain));`,
+
+	// 扩展任务与领取记录的状态约束，支持提交待验收流程
+	`ALTER TABLE tasks DROP CONSTRAINT IF EXISTS chk_tasks_status;`,
+	`ALTER TABLE tasks ADD CONSTRAINT chk_tasks_status CHECK (status IN ('draft','available','claimed','submitted','completed','archived'));`,
+	`ALTER TABLE task_assignments DROP CONSTRAINT IF EXISTS chk_task_assign_status;`,
+	`ALTER TABLE task_assignments ADD CONSTRAINT chk_task_assign_status CHECK (status IN ('claimed','submitted','completed','released'));`,
 }
 
 // RunMigrations 会依次执行所有迁移语句，保证幂等。

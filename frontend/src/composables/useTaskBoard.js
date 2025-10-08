@@ -1,7 +1,14 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useCurrentUser } from './useCurrentUser.js'
 import { fetchCurrentUser, listAccounts, toggleAdmin } from '../services/users.js'
-import { claimTask, createTask, fetchTasks, releaseTask } from '../services/tasks.js'
+import {
+  claimTask,
+  createTask,
+  fetchTasks,
+  releaseTask,
+  submitTaskProgress,
+  verifyTaskCompletion
+} from '../services/tasks.js'
 
 const priorityMeta = {
   critical: { label: '特急', tone: 'var(--danger)' },
@@ -38,12 +45,32 @@ export function useTaskBoard() {
 
   const adminCount = computed(() => accounts.value.filter((account) => account.role === 'admin').length)
 
-  const myPendingTasks = computed(() =>
-    tasks.value
-      .filter((task) => task.status === 'claimed' && task.assignee === currentUser.name)
-      .slice()
-      .sort((a, b) => new Date(a.deadline || 0) - new Date(b.deadline || 0))
-  )
+  const myPendingTasks = computed(() => {
+    const currentId = currentUser.id
+    if (!currentId) return []
+
+    const sortTime = (task) => {
+      if (task.deadline) {
+        const deadline = new Date(task.deadline).getTime()
+        if (!Number.isNaN(deadline)) return deadline
+      }
+      if (task.updatedAt) {
+        const updated = new Date(task.updatedAt).getTime()
+        if (!Number.isNaN(updated)) return updated
+      }
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const executing = tasks.value
+      .filter((task) => task.status === 'claimed' && task.assigneeId === currentId)
+      .map((task) => ({ ...task, pendingKind: 'execute' }))
+
+    const reviewing = tasks.value
+      .filter((task) => task.status === 'submitted' && task.ownerId === currentId)
+      .map((task) => ({ ...task, pendingKind: 'review' }))
+
+    return [...executing, ...reviewing].sort((a, b) => sortTime(a) - sortTime(b))
+  })
 
   const availableTasks = computed(() =>
     tasks.value
@@ -80,6 +107,8 @@ export function useTaskBoard() {
   const mapTaskFromApi = (item) => {
     const status = item.status === 'published' ? 'available' : item.status
     const assigneeName = item.currentAssignee?.username || ''
+    const createdById = item.createdBy || ''
+    const publishedById = item.publishedBy || ''
     return {
       id: item.id,
       title: item.title,
@@ -91,8 +120,12 @@ export function useTaskBoard() {
       status,
       assignee: assigneeName,
       assigneeId: item.currentAssignee?.userId || '',
+      assigneeStatus: item.currentAssignee?.status || '',
       createdAt: item.createdAt,
-      updatedAt: item.updatedAt
+      updatedAt: item.updatedAt,
+      createdById,
+      publishedById,
+      ownerId: publishedById || createdById
     }
   }
 
@@ -203,6 +236,24 @@ export function useTaskBoard() {
     }
   }
 
+  const handleSubmitCompletion = async (task) => {
+    try {
+      await submitTaskProgress(task.id)
+      await loadTasks()
+    } catch (error) {
+      console.error('提交任务失败', error)
+    }
+  }
+
+  const handleVerifyCompletion = async (task) => {
+    try {
+      await verifyTaskCompletion(task.id)
+      await loadTasks()
+    } catch (error) {
+      console.error('验收任务失败', error)
+    }
+  }
+
   const toggleAdminForAccount = async (accountId) => {
     const target = accounts.value.find((item) => item.id === accountId)
     if (!target) return currentUser.role
@@ -281,6 +332,8 @@ export function useTaskBoard() {
     submitTask,
     handleAccept,
     handleRelease,
+    handleSubmitCompletion,
+    handleVerifyCompletion,
     toggleAdminForAccount,
     initialize
   }

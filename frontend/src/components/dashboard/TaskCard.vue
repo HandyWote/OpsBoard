@@ -33,6 +33,21 @@ const deadlineLabel = computed(() => {
 
 const isOwner = computed(() => props.task.assignee === props.currentUserName)
 
+const statusText = computed(() => {
+  switch (props.task.status) {
+    case 'submitted':
+      return props.task.assignee ? `${props.task.assignee} 待验收` : '待验收'
+    case 'completed':
+      return '已完成'
+    case 'archived':
+      return '已归档'
+    case 'claimed':
+      return props.task.assignee ? `${props.task.assignee} 已认领` : '进行中'
+    default:
+      return props.task.assignee ? `${props.task.assignee} 已认领` : '进行中'
+  }
+})
+
 const handleAccept = () => {
   if (props.task.status !== 'available') return
   emit('accept', props.task)
@@ -58,7 +73,7 @@ const handleRelease = () => {
 
     <footer class="card__meta">
       <div class="card__chips">
-        <span class="chip chip--reward">赏金 ¥{{ task.reward }}</span>
+        <span class="chip chip--reward">积分{{ task.reward }}</span>
         <span class="chip chip--deadline">截止 {{ deadlineLabel }}</span>
         <span v-for="tag in task.tags" :key="tag" class="chip chip--tag">#{{ tag }}</span>
       </div>
@@ -82,7 +97,7 @@ const handleRelease = () => {
           释放任务
         </button>
 
-        <span v-else class="card__status">{{ task.assignee ? `${task.assignee} 已认领` : '进行中' }}</span>
+        <span v-else class="card__status">{{ statusText }}</span>
       </div>
     </footer>
   </article>

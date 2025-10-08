@@ -36,3 +36,15 @@ export async function publishTask(taskId) {
     method: 'POST'
   })
 }
+
+export async function submitTaskProgress(taskId) {
+  return requestJSON(`/api/v1/tasks/${taskId}/submit`, {
+    method: 'POST'
+  })
+}
+
+export async function verifyTaskCompletion(taskId) {
+  return requestJSON(`/api/v1/tasks/${taskId}/complete`, {
+    method: 'POST'
+  })
+}

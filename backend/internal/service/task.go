@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"regexp"
@@ -211,9 +212,39 @@ func (s *TaskService) ReleaseTask(ctx context.Context, taskID, userID uuid.UUID)
 	return s.repo.Release(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: userID})
 }
 
-// CompleteTask 完成任务。
+// SubmitTask 执行人提交任务，等待发布人验收。
+func (s *TaskService) SubmitTask(ctx context.Context, taskID, userID uuid.UUID) (task.Task, error) {
+	return s.repo.Submit(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: userID})
+}
+
+// CompleteTask 发布人验收任务，标记为完成并发放奖励。
 func (s *TaskService) CompleteTask(ctx context.Context, taskID, userID uuid.UUID) (task.Task, error) {
-	return s.repo.Complete(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: userID})
+	tk, err := s.repo.GetByID(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return task.Task{}, ErrNotFound
+		}
+		return task.Task{}, err
+	}
+
+	owner := tk.CreatedBy
+	if tk.PublishedBy != nil {
+		owner = *tk.PublishedBy
+	}
+	if owner != userID {
+		return task.Task{}, ErrForbidden
+	}
+	if tk.Status != task.StatusSubmitted {
+		return task.Task{}, fmt.Errorf("%w: task not awaiting verification", ErrValidation)
+	}
+	if tk.CurrentAssignee == nil || tk.CurrentAssignee.UserID == uuid.Nil {
+		return task.Task{}, fmt.Errorf("%w: task missing valid assignee", ErrValidation)
+	}
+	if tk.CurrentAssignee.Status != task.StatusSubmitted {
+		return task.Task{}, fmt.Errorf("%w: task not awaiting verification", ErrValidation)
+	}
+
+	return s.repo.Complete(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: tk.CurrentAssignee.UserID})
 }
 
 // GetTask 返回任务详情。

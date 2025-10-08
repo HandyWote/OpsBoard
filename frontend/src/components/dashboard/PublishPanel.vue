@@ -148,7 +148,7 @@ const handlePaste = (event) => {
 
             <div class="form__grid">
               <label class="form__field">
-                <span>赏金 (¥)</span>
+                <span>积分</span>
                 <input
                   :value="form.reward"
                   type="number"
