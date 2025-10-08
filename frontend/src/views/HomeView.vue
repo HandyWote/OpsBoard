@@ -1,10 +1,12 @@
 <script setup>
+import { ref } from 'vue'
 import WorkspaceTopbar from '../components/layout/WorkspaceTopbar.vue'
 import HeroBanner from '../components/dashboard/HeroBanner.vue'
 import TaskFilterBar from '../components/dashboard/TaskFilterBar.vue'
 import TaskBoard from '../components/dashboard/TaskBoard.vue'
 import PublishPanel from '../components/dashboard/PublishPanel.vue'
 import UserSidebar from '../components/dashboard/UserSidebar.vue'
+import AccountManagerPanel from '../components/dashboard/AccountManagerPanel.vue'
 import { useTaskBoard } from '../composables/useTaskBoard.js'
 
 const {
@@ -18,14 +20,19 @@ const {
   filteredTasks,
   myPendingTasks,
   availableTasks,
+  accounts,
+  adminCount,
   priorityMeta,
   togglePublishPanel,
   updateFormField,
   updateFormDescription,
   handleAccept,
   handleRelease,
-  submitTask
+  submitTask,
+  toggleAdminForAccount
 } = useTaskBoard({ name: '林运维', role: 'admin' })
+
+const showAccountManager = ref(false)
 
 const handleFieldUpdate = ({ field, value }) => {
   updateFormField(field, value)
@@ -34,11 +41,28 @@ const handleFieldUpdate = ({ field, value }) => {
 const handleDescriptionUpdate = (value) => {
   updateFormDescription(value)
 }
+
+const handleOpenAdminPanel = () => {
+  if (!isAdmin.value) return
+  showAccountManager.value = true
+}
+
+const handleToggleAdmin = (accountId) => {
+  const nextRole = toggleAdminForAccount(accountId)
+  if (accountId === currentUser.id && nextRole !== 'admin') {
+    showAccountManager.value = false
+  }
+}
 </script>
 
 <template>
   <div class="workspace">
-    <WorkspaceTopbar :user="currentUser" :is-admin="isAdmin" @toggle-publish="togglePublishPanel" />
+    <WorkspaceTopbar
+      :user="currentUser"
+      :is-admin="isAdmin"
+      @toggle-publish="togglePublishPanel"
+      @open-admin="handleOpenAdminPanel"
+    />
 
     <div class="workspace-body">
       <div class="primary-pane">
@@ -76,6 +100,15 @@ const handleDescriptionUpdate = (value) => {
         :available-tasks="availableTasks"
       />
     </div>
+
+    <AccountManagerPanel
+      v-if="showAccountManager"
+      :accounts="accounts"
+      :current-user-id="currentUser.id"
+      :admin-count="adminCount"
+      @close="showAccountManager = false"
+      @toggle-admin="handleToggleAdmin"
+    />
   </div>
 </template>
 

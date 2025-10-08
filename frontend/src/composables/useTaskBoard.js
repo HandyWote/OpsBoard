@@ -14,6 +14,30 @@ const priorityMeta = {
   low: { label: '低', tone: 'var(--muted)' }
 }
 
+const accountDirectory = [
+  {
+    id: 'ops-admin',
+    name: '林运维',
+    role: 'admin',
+    email: 'lin.ops@example.com',
+    teams: ['校园网络', '应急响应']
+  },
+  {
+    id: 'ops-dev',
+    name: '周巡检',
+    role: 'member',
+    email: 'zhou.patrol@example.com',
+    teams: ['自动化工具', '巡检保障']
+  },
+  {
+    id: 'ops-ops',
+    name: '唐值班',
+    role: 'member',
+    email: 'tang.ops@example.com',
+    teams: ['安全审计', '流程治理']
+  }
+]
+
 const initialTasks = [
   {
     id: 'T-1024',
@@ -62,7 +86,21 @@ const initialTasks = [
 ]
 
 export function useTaskBoard(user = { name: '', role: 'member' }) {
-  const currentUser = reactive({ ...user })
+  const accounts = reactive(accountDirectory.map((account) => ({ ...account })))
+
+  const seedAccount =
+    (user &&
+      accounts.find((account) => account.id === user.id || account.name === user.name)) ||
+    accounts[0]
+
+  const currentUser = reactive({
+    id: seedAccount?.id ?? `user-${Date.now()}`,
+    name: seedAccount?.name ?? user.name ?? '',
+    role: seedAccount?.role ?? user.role ?? 'member',
+    email: seedAccount?.email ?? user.email ?? '',
+    teams: seedAccount?.teams ?? user.teams ?? []
+  })
+
   const sortKey = ref('priority')
   const keyword = ref('')
   const showPublishPanel = ref(false)
@@ -92,6 +130,28 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
       .slice()
       .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
   )
+
+  const adminCount = computed(() => accounts.filter((account) => account.role === 'admin').length)
+
+  const toggleAdminForAccount = (accountId) => {
+    const target = accounts.find((account) => account.id === accountId)
+    if (!target) return currentUser.role
+
+    if (target.role === 'admin') {
+      if (adminCount.value <= 1) {
+        return target.role
+      }
+      target.role = 'member'
+    } else {
+      target.role = 'admin'
+    }
+
+    if (currentUser.id === accountId) {
+      currentUser.role = target.role
+    }
+
+    return target.role
+  }
 
   const filteredTasks = computed(() => {
     const term = keyword.value.trim().toLowerCase()
@@ -200,12 +260,15 @@ export function useTaskBoard(user = { name: '', role: 'member' }) {
     filteredTasks,
     myPendingTasks,
     availableTasks,
+    accounts,
+    adminCount,
     priorityMeta,
     togglePublishPanel,
     updateFormField,
     updateFormDescription,
     handleAccept,
     handleRelease,
-    submitTask
+    submitTask,
+    toggleAdminForAccount
   }
 }

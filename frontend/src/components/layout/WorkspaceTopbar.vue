@@ -10,7 +10,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['toggle-publish'])
+const emit = defineEmits(['toggle-publish', 'open-admin'])
 
 const handlePublish = () => {
   if (!props.isAdmin) return
@@ -37,13 +37,16 @@ const handlePublish = () => {
         <small v-if="!isAdmin">仅管理员可发布</small>
       </button>
 
-      <div class="topbar__user">
-        <span class="topbar__avatar">{{ user.name?.slice(0, 1) ?? 'U' }}</span>
-        <div class="topbar__user-info">
-          <strong>{{ user.name }}</strong>
-          <small>{{ isAdmin ? '管理员' : '成员' }}</small>
-        </div>
-      </div>
+      <button
+        class="topbar__manage"
+        type="button"
+        :class="{ 'topbar__manage--disabled': !isAdmin }"
+        @click="isAdmin ? emit('open-admin') : null"
+      >
+        <span class="topbar__manage-label">管理面板</span>
+        <small v-if="isAdmin" class="topbar__manage-meta">当前：{{ user.name }}</small>
+        <small v-else class="topbar__manage-meta">需管理员权限</small>
+      </button>
     </div>
   </header>
 </template>
@@ -125,37 +128,47 @@ const handlePublish = () => {
   cursor: not-allowed;
 }
 
-.topbar__user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-}
-
-.topbar__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.topbar__user-info {
+.topbar__manage {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  height: 52px;
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border 0.2s ease;
 }
 
-.topbar__user-info strong {
+.topbar__manage:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.topbar__manage--disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.65;
+  transform: none;
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.topbar__manage-label {
   font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.topbar__manage-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 @media (max-width: 768px) {
