@@ -15,11 +15,12 @@ import (
 
 // TaskFilter 控制任务查询条件。
 type TaskFilter struct {
-	Keyword string
-	Status  []task.Status
-	SortKey string
-	Limit   int
-	Offset  int
+	Keyword    string
+	Status     []task.Status
+	SortKey    string
+	Limit      int
+	Offset     int
+	AssignedTo uuid.UUID
 }
 
 // TaskCreateInput 描述创建任务所需字段。
@@ -92,6 +93,19 @@ func (r *taskRepository) List(ctx context.Context, filter TaskFilter) ([]task.Ta
 			placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
 		}
 		conditions = append(conditions, fmt.Sprintf("t.status IN (%s)", strings.Join(placeholders, ", ")))
+	}
+
+	if filter.AssignedTo != uuid.Nil {
+		args = append(args, filter.AssignedTo)
+		placeholder := fmt.Sprintf("$%d", len(args))
+		conditions = append(conditions, fmt.Sprintf(`
+EXISTS (
+	SELECT 1
+	FROM task_assignments ta
+	WHERE ta.task_id = t.id
+		AND ta.user_id = %s
+		AND ta.status = t.status
+)`, placeholder))
 	}
 
 	where := ""

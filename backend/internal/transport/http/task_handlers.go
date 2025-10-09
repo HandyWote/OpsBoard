@@ -7,6 +7,8 @@ import (
 
 	"backend/internal/domain/task"
 	"backend/internal/service"
+
+	"github.com/google/uuid"
 )
 
 type createTaskRequest struct {
@@ -49,12 +51,33 @@ func (h *Handler) handleListTasks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	assigneeParam := strings.TrimSpace(r.URL.Query().Get("assignee"))
+	assignedTo := uuid.Nil
+	if assigneeParam != "" {
+		if strings.EqualFold(assigneeParam, "me") {
+			userID, ok := CurrentUserID(r.Context())
+			if !ok {
+				respondError(w, http.StatusUnauthorized, "unauthorized", "未授权访问")
+				return
+			}
+			assignedTo = userID
+		} else {
+			id, parseErr := uuid.Parse(assigneeParam)
+			if parseErr != nil {
+				respondError(w, http.StatusBadRequest, "invalid_assignee", "执行人参数不合法")
+				return
+			}
+			assignedTo = id
+		}
+	}
+
 	result, err := h.services.Tasks.ListTasks(r.Context(), service.TaskListInput{
-		Keyword:  keyword,
-		Status:   statuses,
-		SortKey:  sortKey,
-		Page:     page,
-		PageSize: pageSize,
+		Keyword:    keyword,
+		Status:     statuses,
+		SortKey:    sortKey,
+		Page:       page,
+		PageSize:   pageSize,
+		AssignedTo: assignedTo,
 	})
 	if err != nil {
 		h.respondServiceError(w, err)

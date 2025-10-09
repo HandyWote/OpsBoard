@@ -13,6 +13,14 @@ const props = defineProps({
   availableTasks: {
     type: Array,
     default: () => []
+  },
+  completedTasks: {
+    type: Array,
+    default: () => []
+  },
+  earnedPoints: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -21,6 +29,29 @@ const emit = defineEmits(['submit-task', 'verify-task'])
 const initials = computed(() => (props.user.name ? props.user.name.slice(0, 1) : '用'))
 const pendingPreview = computed(() => props.pendingTasks.slice(0, 3))
 const availablePreview = computed(() => props.availableTasks.slice(0, 3))
+const completedPreview = computed(() => props.completedTasks.slice(0, 3))
+const completedCount = computed(() => props.completedTasks.length)
+const completedCountLabel = computed(() => completedCount.value.toLocaleString('zh-CN'))
+const earnedPointsLabel = computed(() => {
+  const value = Number(props.earnedPoints)
+  if (!Number.isFinite(value)) return '0'
+  const normalized = Math.max(0, Math.round(value))
+  return normalized.toLocaleString('zh-CN')
+})
+
+const formatCompletedAt = (value) => {
+  if (!value) return '未知时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未知时间'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const completionMore = computed(() => Math.max(0, props.completedTasks.length - completedPreview.value.length))
 
 const roleLabel = computed(() => {
   if (props.user.role === 'admin') return '管理员'
@@ -66,6 +97,14 @@ const handleTaskAction = (task) => {
 
     <section class="quick-stats">
       <div class="stat">
+        <span class="label">累计积分</span>
+        <span class="value">{{ earnedPointsLabel }}</span>
+      </div>
+      <div class="stat">
+        <span class="label">已完成任务</span>
+        <span class="value">{{ completedCountLabel }}</span>
+      </div>
+      <div class="stat">
         <span class="label">待处理任务</span>
         <span class="value">{{ pendingTasks.length }}</span>
       </div>
@@ -102,6 +141,21 @@ const handleTaskAction = (task) => {
           <p class="task-deadline">截止：{{ formatDeadline(task.deadline) }}</p>
         </li>
       </ul>
+    </section>
+
+    <section class="task-block">
+      <h3>历史完成</h3>
+      <ul v-if="completedPreview.length" class="task-list task-list--history">
+        <li v-for="task in completedPreview" :key="task.id" class="task-item task-item--history">
+          <div class="task-info">
+            <p class="task-title">{{ task.title }}</p>
+            <p class="task-meta">完成时间：{{ formatCompletedAt(task.completedAt || task.updatedAt) }}</p>
+          </div>
+          <span class="task-reward">+{{ task.reward }} 积分</span>
+        </li>
+      </ul>
+      <p v-else class="empty">暂无完成记录</p>
+      <p v-if="completionMore > 0" class="more">还有 {{ completionMore }} 条记录，可在“我的”中查看。</p>
     </section>
   </aside>
 </template>
@@ -209,6 +263,10 @@ const handleTaskAction = (task) => {
   list-style: none;
 }
 
+.task-list--history .task-item {
+  align-items: center;
+}
+
 .task-item {
   display: flex;
   align-items: stretch;
@@ -225,6 +283,10 @@ const handleTaskAction = (task) => {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+.task-item--history .task-info {
+  gap: 6px;
 }
 
 .task-status {
@@ -258,6 +320,12 @@ const handleTaskAction = (task) => {
   margin: 0;
   font-size: 12px;
   color: var(--frost-text-secondary);
+}
+
+.task-reward {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6ee7b7;
 }
 
 .task-action {

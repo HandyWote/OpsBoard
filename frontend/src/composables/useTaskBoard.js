@@ -9,6 +9,7 @@ import {
   submitTaskProgress,
   verifyTaskCompletion
 } from '../services/tasks.js'
+import { mapTaskFromApi } from '../utils/mapTask.js'
 
 const priorityMeta = {
   critical: { label: '特急', tone: 'var(--danger)' },
@@ -26,6 +27,7 @@ export function useTaskBoard() {
   const loadingUser = ref(false)
   const accounts = ref([])
   const loadingAccounts = ref(false)
+  const completedTasks = ref([])
 
   const sortKey = ref('priority')
   const keyword = ref('')
@@ -44,6 +46,26 @@ export function useTaskBoard() {
   const isAdmin = computed(() => currentUser.role === 'admin')
 
   const adminCount = computed(() => accounts.value.filter((account) => account.role === 'admin').length)
+
+  const completionTime = (task) => {
+    if (task.completedAt) {
+      const completedTs = new Date(task.completedAt).getTime()
+      if (!Number.isNaN(completedTs)) return completedTs
+    }
+    if (task.updatedAt) {
+      const updatedTs = new Date(task.updatedAt).getTime()
+      if (!Number.isNaN(updatedTs)) return updatedTs
+    }
+    return 0
+  }
+
+  const myCompletedTasks = computed(() =>
+    completedTasks.value.slice().sort((a, b) => completionTime(b) - completionTime(a))
+  )
+
+  const earnedPoints = computed(() =>
+    completedTasks.value.reduce((sum, task) => sum + (Number(task.reward) || 0), 0)
+  )
 
   const myPendingTasks = computed(() => {
     const currentId = currentUser.id
@@ -104,31 +126,6 @@ export function useTaskBoard() {
     publishForm.description = ''
   }
 
-  const mapTaskFromApi = (item) => {
-    const status = item.status === 'published' ? 'available' : item.status
-    const assigneeName = item.currentAssignee?.username || ''
-    const createdById = item.createdBy || ''
-    const publishedById = item.publishedBy || ''
-    return {
-      id: item.id,
-      title: item.title,
-      summary: item.descriptionPlain || '',
-      reward: item.bounty ?? 0,
-      deadline: item.deadline,
-      priority: item.priority || 'medium',
-      tags: Array.isArray(item.tags) ? item.tags.slice() : [],
-      status,
-      assignee: assigneeName,
-      assigneeId: item.currentAssignee?.userId || '',
-      assigneeStatus: item.currentAssignee?.status || '',
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      createdById,
-      publishedById,
-      ownerId: publishedById || createdById
-    }
-  }
-
   const loadTasks = async () => {
     loadingTasks.value = true
     try {
@@ -143,6 +140,24 @@ export function useTaskBoard() {
       console.error('加载任务失败', error)
     } finally {
       loadingTasks.value = false
+    }
+  }
+
+  const loadCompletedTasks = async () => {
+    if (!currentUser.id) {
+      completedTasks.value = []
+      return
+    }
+    try {
+      const data = await fetchTasks({
+        status: 'completed',
+        assignee: 'me',
+        pageSize: 100
+      })
+      const items = Array.isArray(data?.items) ? data.items : []
+      completedTasks.value = items.map(mapTaskFromApi)
+    } catch (error) {
+      console.error('加载完成任务失败', error)
     }
   }
 
@@ -184,7 +199,7 @@ export function useTaskBoard() {
 
   const initialize = async () => {
     await Promise.all([loadCurrentUser(), loadTasks()])
-    await loadAccounts()
+    await Promise.all([loadAccounts(), loadCompletedTasks()])
   }
 
   const submitTask = async () => {
@@ -249,6 +264,7 @@ export function useTaskBoard() {
     try {
       await verifyTaskCompletion(task.id)
       await loadTasks()
+      await loadCompletedTasks()
     } catch (error) {
       console.error('验收任务失败', error)
     }
@@ -324,6 +340,8 @@ export function useTaskBoard() {
     publishForm,
     myPendingTasks,
     availableTasks,
+    myCompletedTasks,
+    earnedPoints,
     accounts,
     adminCount,
     updateFormField: updatePublishForm,

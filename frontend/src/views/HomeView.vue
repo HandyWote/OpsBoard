@@ -22,6 +22,8 @@ const {
   tasks: boardTasks,
   myPendingTasks,
   availableTasks,
+  myCompletedTasks,
+  earnedPoints,
   accounts,
   adminCount,
   priorityMeta,
@@ -114,6 +116,8 @@ watchEffect(() => {
         :user="currentUser"
         :pending-tasks="myPendingTasks"
         :available-tasks="availableTasks"
+        :completed-tasks="myCompletedTasks"
+        :earned-points="earnedPoints"
         @submit-task="handleSubmitCompletion"
         @verify-task="handleVerifyCompletion"
       />

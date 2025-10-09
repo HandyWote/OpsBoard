@@ -7,6 +7,7 @@ export async function fetchTasks(params = {}) {
   if (params.page) searchParams.set('page', String(params.page))
   if (params.pageSize) searchParams.set('pageSize', String(params.pageSize))
   if (params.status) searchParams.set('status', params.status)
+  if (params.assignee) searchParams.set('assignee', params.assignee)
 
   const query = searchParams.toString()
   return requestJSON(`/api/v1/tasks${query ? `?${query}` : ''}`)

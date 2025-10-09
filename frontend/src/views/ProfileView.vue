@@ -3,7 +3,9 @@ import { computed, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCurrentUser } from '../composables/useCurrentUser.js'
 import { changePassword, fetchCurrentUser, updateProfile as updateProfileRequest } from '../services/users.js'
+import { fetchTasks } from '../services/tasks.js'
 import { isAuthenticated } from '../services/http.js'
+import { mapTaskFromApi } from '../utils/mapTask.js'
 
 const router = useRouter()
 const { profile, updateProfile, hydrate } = useCurrentUser()
@@ -26,6 +28,9 @@ const profileError = ref('')
 const savingSecurity = ref(false)
 const securityMessage = ref('')
 const securityError = ref('')
+const completedTasks = ref([])
+const loadingHistory = ref(false)
+const historyError = ref('')
 
 watch(
   () => [profile.name, profile.headline, profile.bio],
@@ -57,6 +62,49 @@ const canSubmitPassword = computed(() => {
     !savingSecurity.value
   )
 })
+
+const completionTime = (task) => {
+  if (task.completedAt) {
+    const ts = new Date(task.completedAt).getTime()
+    if (!Number.isNaN(ts)) return ts
+  }
+  if (task.updatedAt) {
+    const ts = new Date(task.updatedAt).getTime()
+    if (!Number.isNaN(ts)) return ts
+  }
+  return 0
+}
+
+const completedHistory = computed(() =>
+  completedTasks.value.slice().sort((a, b) => completionTime(b) - completionTime(a))
+)
+
+const historyPreview = computed(() => completedHistory.value.slice(0, 10))
+
+const extraHistoryCount = computed(() =>
+  Math.max(0, completedHistory.value.length - historyPreview.value.length)
+)
+
+const completedCount = computed(() => completedTasks.value.length)
+const completedCountLabel = computed(() => completedCount.value.toLocaleString('zh-CN'))
+
+const earnedPoints = computed(() =>
+  completedTasks.value.reduce((sum, task) => sum + (Number(task.reward) || 0), 0)
+)
+const earnedPointsLabel = computed(() => earnedPoints.value.toLocaleString('zh-CN'))
+
+const formatHistoryTime = (value) => {
+  if (!value) return '未知时间'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '未知时间'
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
 
 const handleProfileSubmit = async () => {
   if (!canSubmitProfile.value) return
@@ -92,6 +140,24 @@ const resetProfileForm = () => {
   profileForm.headline = profile.headline ?? ''
   profileForm.bio = profile.bio ?? ''
   profileError.value = ''
+}
+
+const loadCompletedTasks = async () => {
+  loadingHistory.value = true
+  historyError.value = ''
+  try {
+    const data = await fetchTasks({
+      status: 'completed',
+      assignee: 'me',
+      pageSize: 100
+    })
+    const items = Array.isArray(data?.items) ? data.items : []
+    completedTasks.value = items.map(mapTaskFromApi)
+  } catch (error) {
+    historyError.value = error.message || '历史任务加载失败'
+  } finally {
+    loadingHistory.value = false
+  }
 }
 
 const handleSecuritySubmit = async () => {
@@ -141,6 +207,7 @@ onMounted(async () => {
   } catch (error) {
     /* ignore */
   }
+  await loadCompletedTasks()
 })
 
 watchEffect(() => {
@@ -173,6 +240,16 @@ watchEffect(() => {
             <span v-if="profile.teams?.length" class="summary-chip summary-chip--ghost">
               {{ profile.teams.join(' / ') }}
             </span>
+          </div>
+          <div class="summary-card__stats">
+            <div class="summary-stat">
+              <span class="summary-stat__label">累计积分</span>
+              <span class="summary-stat__value">{{ earnedPointsLabel }}</span>
+            </div>
+            <div class="summary-stat">
+              <span class="summary-stat__label">完成任务</span>
+              <span class="summary-stat__value">{{ completedCountLabel }}</span>
+            </div>
           </div>
           <p v-if="profile.bio" class="summary-card__bio">{{ profile.bio }}</p>
         </section>
@@ -298,6 +375,36 @@ watchEffect(() => {
             </button>
           </div>
         </form>
+
+        <section class="settings-panel settings-panel--tertiary history-panel">
+          <div class="settings-panel__header">
+            <div>
+              <p class="settings-panel__eyebrow">任务记录</p>
+              <h2>历史完成任务</h2>
+            </div>
+            <transition name="fade">
+              <span v-if="historyError" class="status-pill status-pill--danger">{{ historyError }}</span>
+            </transition>
+          </div>
+
+          <div v-if="loadingHistory" class="history-empty">正在加载历史任务...</div>
+          <p v-else-if="historyError" class="history-empty history-empty--error">{{ historyError }}</p>
+          <template v-else>
+            <ul v-if="historyPreview.length" class="history-list">
+              <li v-for="task in historyPreview" :key="task.id" class="history-item">
+                <div class="history-item__info">
+                  <p class="history-item__title">{{ task.title }}</p>
+                  <p class="history-item__meta">完成时间：{{ formatHistoryTime(task.completedAt || task.updatedAt) }}</p>
+                </div>
+                <span class="history-item__reward">+{{ task.reward }} 积分</span>
+              </li>
+            </ul>
+            <p v-else class="history-empty">还没有完成的任务，去任务大厅挑战一下吧。</p>
+            <p v-if="extraHistoryCount > 0" class="history-more">
+              还有 {{ extraHistoryCount }} 条记录，可在后台查看更多。
+            </p>
+          </template>
+        </section>
       </section>
     </div>
   </div>
@@ -414,6 +521,35 @@ watchEffect(() => {
   border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
+.summary-card__stats {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-stat {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.summary-stat__label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  letter-spacing: 0.3px;
+}
+
+.summary-stat__value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+}
+
 .summary-card__bio {
   margin: 10px 0 0;
   line-height: 1.6;
@@ -461,6 +597,12 @@ watchEffect(() => {
 
 .settings-panel--secondary {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.settings-panel--tertiary {
+  background: rgba(255, 255, 255, 0.08);
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .settings-panel__header {
@@ -573,6 +715,73 @@ watchEffect(() => {
   border-radius: 50%;
   display: inline-block;
   animation: spin 0.6s linear infinite;
+}
+
+.history-panel {
+  gap: 20px;
+}
+
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.history-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.history-item__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.history-item__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--frost-text-secondary);
+}
+
+.history-item__reward {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6ee7b7;
+}
+
+.history-empty {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--frost-text-secondary);
+}
+
+.history-empty--error {
+  color: #feb2b2;
+}
+
+.history-more {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .status-pill {

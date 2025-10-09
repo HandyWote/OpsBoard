@@ -25,11 +25,12 @@ type TaskService struct {
 
 // TaskListInput 控制任务查询条件。
 type TaskListInput struct {
-	Keyword  string
-	Status   []task.Status
-	SortKey  string
-	Page     int
-	PageSize int
+	Keyword    string
+	Status     []task.Status
+	SortKey    string
+	Page       int
+	PageSize   int
+	AssignedTo uuid.UUID
 }
 
 // TaskListResult 是分页返回结果。
@@ -85,11 +86,12 @@ func (s *TaskService) ListTasks(ctx context.Context, input TaskListInput) (TaskL
 	offset := (page - 1) * pageSize
 
 	tasks, total, err := s.repo.List(ctx, repository.TaskFilter{
-		Keyword: strings.TrimSpace(input.Keyword),
-		Status:  input.Status,
-		SortKey: input.SortKey,
-		Limit:   pageSize,
-		Offset:  offset,
+		Keyword:    strings.TrimSpace(input.Keyword),
+		Status:     input.Status,
+		SortKey:    input.SortKey,
+		Limit:      pageSize,
+		Offset:     offset,
+		AssignedTo: input.AssignedTo,
 	})
 	if err != nil {
 		return TaskListResult{}, err
