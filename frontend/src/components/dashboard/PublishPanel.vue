@@ -153,7 +153,7 @@ const handlePaste = (event) => {
                   :value="form.reward"
                   type="number"
                   min="0"
-                  step="10"
+                  step="1"
                   placeholder="200"
                   @input="handleField('reward', $event)"
                 />
