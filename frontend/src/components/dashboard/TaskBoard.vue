@@ -13,10 +13,14 @@ defineProps({
   currentUserName: {
     type: String,
     default: ''
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['accept', 'release'])
+const emit = defineEmits(['accept', 'release', 'edit', 'delete'])
 </script>
 
 <template>
@@ -27,8 +31,11 @@ const emit = defineEmits(['accept', 'release'])
       :task="task"
       :priority-meta="priorityMeta"
       :current-user-name="currentUserName"
+      :is-admin="isAdmin"
       @accept="emit('accept', $event)"
       @release="emit('release', $event)"
+      @edit="emit('edit', $event)"
+      @delete="emit('delete', $event)"
     />
 
     <p v-if="!tasks.length" class="board__empty">暂无符合条件的任务，试试更换筛选条件。</p>

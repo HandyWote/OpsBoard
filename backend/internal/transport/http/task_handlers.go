@@ -204,6 +204,21 @@ func (h *Handler) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, mapTask(updated))
 }
 
+func (h *Handler) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_id", "任务 ID 不合法")
+		return
+	}
+
+	if err := h.services.Tasks.DeleteTask(r.Context(), id); err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *Handler) handlePublishTask(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUIDParam(r, "id")
 	if err != nil {

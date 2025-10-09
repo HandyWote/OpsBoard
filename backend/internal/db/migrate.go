@@ -98,6 +98,8 @@ var migrationStatements = []string{
 	`CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON tasks (deadline);`,
 	`CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks (created_by);`,
 	`CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks (created_at DESC);`,
+	`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;`,
+	`CREATE INDEX IF NOT EXISTS idx_tasks_deleted_at ON tasks (deleted_at);`,
 
 	// 标签
 	`CREATE TABLE IF NOT EXISTS task_tags (

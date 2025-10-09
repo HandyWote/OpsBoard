@@ -8,6 +8,7 @@ export function mapTaskFromApi(item = {}) {
     id: item.id,
     title: item.title,
     summary: item.descriptionPlain || '',
+    descriptionHtml: item.descriptionHtml || '',
     reward: item.bounty ?? 0,
     deadline: item.deadline,
     priority: item.priority || 'medium',

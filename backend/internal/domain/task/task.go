@@ -40,6 +40,7 @@ type Task struct {
 	PublishedBy      *uuid.UUID
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	DeletedAt        *time.Time
 	Tags             []Tag
 	CurrentAssignee  *Assignment
 }

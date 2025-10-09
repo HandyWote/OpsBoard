@@ -13,10 +13,14 @@ const props = defineProps({
   currentUserName: {
     type: String,
     default: ''
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
   }
 })
 
-const emit = defineEmits(['accept', 'release'])
+const emit = defineEmits(['accept', 'release', 'edit', 'delete'])
 
 const meta = computed(() => props.priorityMeta[props.task.priority] || { label: '普通', tone: 'rgba(255,255,255,0.85)' })
 
@@ -48,6 +52,8 @@ const statusText = computed(() => {
   }
 })
 
+const canEdit = computed(() => props.isAdmin && props.task.status !== 'completed')
+
 const handleAccept = () => {
   if (props.task.status !== 'available') return
   emit('accept', props.task)
@@ -57,15 +63,33 @@ const handleRelease = () => {
   if (!isOwner.value) return
   emit('release', props.task)
 }
+
+const handleEdit = () => {
+  if (!canEdit.value) return
+  emit('edit', props.task)
+}
+
+const handleDelete = () => {
+  if (!props.isAdmin) return
+  emit('delete', props.task)
+}
 </script>
 
 <template>
   <article class="card" :class="`card--${task.status}`">
     <header class="card__header">
       <span class="card__id">#{{ task.id }}</span>
-      <span class="card__priority" :style="{ '--priority-tone': meta.tone }">
-        {{ meta.label }}
-      </span>
+      <div class="card__header-actions">
+        <span class="card__priority" :style="{ '--priority-tone': meta.tone }">
+          {{ meta.label }}
+        </span>
+        <div v-if="isAdmin" class="card__admin-actions">
+          <button v-if="canEdit" type="button" class="card__admin-btn" @click="handleEdit">编辑</button>
+          <button type="button" class="card__admin-btn card__admin-btn--danger" @click="handleDelete">
+            删除
+          </button>
+        </div>
+      </div>
     </header>
 
     <h2 class="card__title">{{ task.title }}</h2>
@@ -131,6 +155,12 @@ const handleRelease = () => {
   font-size: 13px;
 }
 
+.card__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .card__id {
   color: rgba(255, 255, 255, 0.7);
 }
@@ -143,6 +173,42 @@ const handleRelease = () => {
   color: var(--priority-tone);
   font-weight: 600;
   font-size: 12px;
+}
+
+.card__admin-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card__admin-btn {
+  padding: 4px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
+}
+
+.card__admin-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.42);
+  color: #fff;
+}
+
+.card__admin-btn--danger {
+  border-color: rgba(248, 113, 113, 0.6);
+  color: rgba(248, 113, 113, 0.9);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.card__admin-btn--danger:hover {
+  background: rgba(248, 113, 113, 0.2);
+  border-color: rgba(248, 113, 113, 0.8);
+  color: #fff;
 }
 
 .card__title {

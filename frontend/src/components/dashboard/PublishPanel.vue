@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   form: {
@@ -9,6 +9,11 @@ const props = defineProps({
   submitting: {
     type: Boolean,
     default: false
+  },
+  mode: {
+    type: String,
+    default: 'create',
+    validator: (value) => ['create', 'edit'].includes(value)
   }
 })
 
@@ -16,6 +21,15 @@ const emit = defineEmits(['close', 'submit', 'update:field', 'update:description
 
 const editorRef = ref(null)
 const activeMarks = ref(new Set())
+const isEditMode = computed(() => props.mode === 'edit')
+const dialogLabel = computed(() => (isEditMode.value ? '编辑任务' : '发布新任务'))
+const eyebrowLabel = computed(() => (isEditMode.value ? '管理面板' : '新的运维任务'))
+const headingLabel = computed(() => (isEditMode.value ? '编辑任务' : '发布任务'))
+const subtitleLabel = computed(() =>
+  isEditMode.value ? '更新任务信息并同步至任务大厅。' : '完善基础信息并通过富文本描述执行标准。'
+)
+const submitIdleLabel = computed(() => (isEditMode.value ? '保存修改' : '发布任务'))
+const submitBusyLabel = computed(() => (isEditMode.value ? '保存中...' : '发布中...'))
 
 onMounted(() => {
   if (editorRef.value) {
@@ -121,15 +135,15 @@ const handlePaste = (event) => {
 
 <template>
   <transition name="publish-overlay" appear>
-    <div class="panel" role="dialog" aria-modal="true" aria-label="发布新任务">
+    <div class="panel" role="dialog" aria-modal="true" :aria-label="dialogLabel">
       <transition name="publish-card" appear>
         <section class="panel__content">
           <div class="panel__glow" aria-hidden="true"></div>
           <header class="panel__header">
             <div>
-              <p class="panel__eyebrow">新的运维任务</p>
-              <h2>发布任务</h2>
-              <p class="panel__subtitle">完善基础信息并通过富文本描述执行标准。</p>
+              <p class="panel__eyebrow">{{ eyebrowLabel }}</p>
+              <h2>{{ headingLabel }}</h2>
+              <p class="panel__subtitle">{{ subtitleLabel }}</p>
             </div>
             <button type="button" class="panel__close" @click="emit('close')" aria-label="关闭发布面板">✕</button>
           </header>
@@ -214,8 +228,8 @@ const handlePaste = (event) => {
             <div class="form__actions">
               <button type="button" class="form__btn form__btn--ghost" @click="emit('close')">取消</button>
               <button type="submit" class="form__btn" :disabled="submitting">
-                <span v-if="!submitting">发布任务</span>
-                <span v-else>发布中...</span>
+                <span v-if="!submitting">{{ submitIdleLabel }}</span>
+                <span v-else>{{ submitBusyLabel }}</span>
               </button>
             </div>
           </form>

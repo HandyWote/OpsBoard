@@ -4,9 +4,11 @@ import { fetchCurrentUser, listAccounts, toggleAdmin } from '../services/users.j
 import {
   claimTask,
   createTask,
+  deleteTask,
   fetchTasks,
   releaseTask,
   submitTaskProgress,
+  updateTask,
   verifyTaskCompletion
 } from '../services/tasks.js'
 import { mapTaskFromApi } from '../utils/mapTask.js'
@@ -42,10 +44,27 @@ export function useTaskBoard() {
     tags: '',
     description: ''
   })
+  const panelMode = ref('create')
+  const editingTaskId = ref('')
 
   const isAdmin = computed(() => currentUser.role === 'admin')
 
   const adminCount = computed(() => accounts.value.filter((account) => account.role === 'admin').length)
+
+  const toInputDeadline = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    return offsetDate.toISOString().slice(0, 16)
+  }
+
+  const toDeadlinePayload = (value) => {
+    if (!value) return null
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    return date.toISOString()
+  }
 
   const completionTime = (task) => {
     if (task.completedAt) {
@@ -113,17 +132,72 @@ export function useTaskBoard() {
     }
   }
 
-  const togglePublishPanel = () => {
-    if (!isAdmin.value && !showPublishPanel.value) return
-    showPublishPanel.value = !showPublishPanel.value
-  }
-
   const resetPublishForm = () => {
     publishForm.title = ''
     publishForm.reward = ''
     publishForm.deadline = ''
     publishForm.tags = ''
     publishForm.description = ''
+  }
+
+  const closePublishPanel = () => {
+    showPublishPanel.value = false
+    panelMode.value = 'create'
+    editingTaskId.value = ''
+    resetPublishForm()
+  }
+
+  const openPublishPanel = () => {
+    if (!isAdmin.value) return
+    panelMode.value = 'create'
+    editingTaskId.value = ''
+    resetPublishForm()
+    showPublishPanel.value = true
+  }
+
+  const togglePublishPanel = () => {
+    if (!isAdmin.value) return
+    if (showPublishPanel.value) {
+      closePublishPanel()
+    } else {
+      openPublishPanel()
+    }
+  }
+
+  const fillFormFromTask = (task) => {
+    publishForm.title = task.title || ''
+    publishForm.reward = task.reward ? String(task.reward) : ''
+    publishForm.deadline = toInputDeadline(task.deadline)
+    publishForm.tags = Array.isArray(task.tags) ? task.tags.join(', ') : ''
+    publishForm.description = task.descriptionHtml || ''
+  }
+
+  const startEditTask = (task) => {
+    if (!isAdmin.value || !task) return
+    if (task.status === 'completed') {
+      console.warn('已完成的任务不可编辑')
+      return
+    }
+    panelMode.value = 'edit'
+    editingTaskId.value = task.id
+    fillFormFromTask(task)
+    showPublishPanel.value = true
+  }
+
+  const removeTask = async (task) => {
+    if (!isAdmin.value || !task) return
+    const confirmed = window.confirm(`确定删除任务「${task.title}」吗？该操作不可撤销。`)
+    if (!confirmed) return
+
+    try {
+      await deleteTask(task.id)
+      if (editingTaskId.value === task.id) {
+        closePublishPanel()
+      }
+      await Promise.all([loadTasks(), loadCompletedTasks()])
+    } catch (error) {
+      console.error('删除任务失败', error)
+    }
   }
 
   const loadTasks = async () => {
@@ -207,27 +281,43 @@ export function useTaskBoard() {
       return
     }
 
+    const currentMode = panelMode.value
     submitting.value = true
     try {
-      const payload = {
+      const basePayload = {
         title: publishForm.title.trim(),
         descriptionHtml: publishForm.description,
         bounty: Number(publishForm.reward) || 0,
         priority: 'medium',
-        deadline: publishForm.deadline ? new Date(publishForm.deadline).toISOString() : null,
+        deadline: toDeadlinePayload(publishForm.deadline),
         tags: publishForm.tags
           .split(',')
           .map((tag) => tag.trim())
-          .filter(Boolean),
-        publish: true
+          .filter(Boolean)
       }
 
-      await createTask(payload)
+      if (currentMode === 'edit' && editingTaskId.value) {
+        await updateTask(editingTaskId.value, {
+          title: basePayload.title,
+          descriptionHtml: basePayload.descriptionHtml,
+          bounty: basePayload.bounty,
+          priority: basePayload.priority,
+          deadline: basePayload.deadline,
+          tags: basePayload.tags
+        })
+      } else {
+        await createTask({ ...basePayload, publish: true })
+      }
+
+      panelMode.value = 'create'
+      editingTaskId.value = ''
       resetPublishForm()
-      showPublishPanel.value = false
+
       await loadTasks()
+      closePublishPanel()
     } catch (error) {
-      console.error('发布任务失败', error)
+      const message = currentMode === 'edit' ? '更新任务失败' : '发布任务失败'
+      console.error(message, error)
     } finally {
       submitting.value = false
     }
@@ -336,6 +426,7 @@ export function useTaskBoard() {
     loadingUser,
     loadingAccounts,
     showPublishPanel,
+    panelMode,
     submitting,
     publishForm,
     myPendingTasks,
@@ -346,7 +437,10 @@ export function useTaskBoard() {
     adminCount,
     updateFormField: updatePublishForm,
     updateFormDescription: (value) => updatePublishForm('description', value),
-    togglePublishPanel,
+    openPublishPanel,
+    closePublishPanel,
+    startEditTask,
+    removeTask,
     submitTask,
     handleAccept,
     handleRelease,

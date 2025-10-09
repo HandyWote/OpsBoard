@@ -17,6 +17,7 @@ const {
   sortKey,
   keyword,
   showPublishPanel,
+  panelMode,
   submitting,
   publishForm,
   tasks: boardTasks,
@@ -27,7 +28,8 @@ const {
   accounts,
   adminCount,
   priorityMeta,
-  togglePublishPanel,
+  openPublishPanel,
+  closePublishPanel,
   updateFormField,
   updateFormDescription,
   handleAccept,
@@ -35,7 +37,9 @@ const {
   handleSubmitCompletion,
   handleVerifyCompletion,
   submitTask,
-  toggleAdminForAccount
+  toggleAdminForAccount,
+  startEditTask,
+  removeTask
 } = useTaskBoard()
 
 const showAccountManager = ref(false)
@@ -70,6 +74,22 @@ watchEffect(() => {
     router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
   }
 })
+
+const handleCreateTask = () => {
+  if (showPublishPanel.value && panelMode.value === 'create') {
+    closePublishPanel()
+  } else {
+    openPublishPanel()
+  }
+}
+
+const handleEditTask = (task) => {
+  startEditTask(task)
+}
+
+const handleDeleteTask = (task) => {
+  removeTask(task)
+}
 </script>
 
 <template>
@@ -77,7 +97,7 @@ watchEffect(() => {
     <WorkspaceTopbar
       :user="currentUser"
       :is-admin="isAdmin"
-      @toggle-publish="togglePublishPanel"
+      @toggle-publish="handleCreateTask"
       @open-admin="handleOpenAdminPanel"
       @open-profile="handleOpenProfile"
     />
@@ -97,15 +117,19 @@ watchEffect(() => {
           :tasks="boardTasks"
           :priority-meta="priorityMeta"
           :current-user-name="currentUser.name"
+          :is-admin="isAdmin"
           @accept="handleAccept"
           @release="handleRelease"
+          @edit="handleEditTask"
+          @delete="handleDeleteTask"
         />
 
         <PublishPanel
           v-if="showPublishPanel"
           :form="publishForm"
+          :mode="panelMode"
           :submitting="submitting"
-          @close="togglePublishPanel"
+          @close="closePublishPanel"
           @submit="submitTask"
           @update:field="handleFieldUpdate"
           @update:description="handleDescriptionUpdate"

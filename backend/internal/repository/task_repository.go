@@ -15,12 +15,13 @@ import (
 
 // TaskFilter 控制任务查询条件。
 type TaskFilter struct {
-	Keyword    string
-	Status     []task.Status
-	SortKey    string
-	Limit      int
-	Offset     int
-	AssignedTo uuid.UUID
+	Keyword        string
+	Status         []task.Status
+	SortKey        string
+	Limit          int
+	Offset         int
+	AssignedTo     uuid.UUID
+	IncludeDeleted bool
 }
 
 // TaskCreateInput 描述创建任务所需字段。
@@ -59,6 +60,7 @@ type TaskRepository interface {
 	List(ctx context.Context, filter TaskFilter) ([]task.Task, int, error)
 	Create(ctx context.Context, input TaskCreateInput) (task.Task, error)
 	Update(ctx context.Context, input TaskUpdateInput) (task.Task, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 	SetStatus(ctx context.Context, taskID uuid.UUID, status task.Status, actor uuid.UUID) (task.Task, error)
 	Claim(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
 	Release(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
@@ -79,6 +81,10 @@ func NewTaskRepository(db *sql.DB) TaskRepository {
 func (r *taskRepository) List(ctx context.Context, filter TaskFilter) ([]task.Task, int, error) {
 	args := make([]any, 0)
 	conditions := make([]string, 0)
+
+	if !filter.IncludeDeleted {
+		conditions = append(conditions, "t.deleted_at IS NULL")
+	}
 
 	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
 		args = append(args, "%"+strings.ToLower(keyword)+"%")
@@ -155,6 +161,7 @@ SELECT
 	t.published_by,
 	t.created_at,
 	t.updated_at,
+	t.deleted_at,
 	la.assignment_id,
 	la.user_id,
 	la.display_name,
@@ -198,6 +205,7 @@ LIMIT $%d OFFSET $%d
 			tk               task.Task
 			publishedByNull  sql.NullString
 			deadlineNull     sql.NullTime
+			deletedNull      sql.NullTime
 			assignmentID     sql.NullInt64
 			assignmentUser   sql.NullString
 			assignmentName   sql.NullString
@@ -220,6 +228,7 @@ LIMIT $%d OFFSET $%d
 			&publishedByNull,
 			&tk.CreatedAt,
 			&tk.UpdatedAt,
+			&deletedNull,
 			&assignmentID,
 			&assignmentUser,
 			&assignmentName,
@@ -235,6 +244,11 @@ LIMIT $%d OFFSET $%d
 		if deadlineNull.Valid {
 			deadline := deadlineNull.Time
 			tk.Deadline = &deadline
+		}
+
+		if deletedNull.Valid {
+			del := deletedNull.Time
+			tk.DeletedAt = &del
 		}
 
 		if publishedByNull.Valid {
@@ -424,9 +438,18 @@ UPDATE tasks
 SET %s,
 	updated_at = $%d
 WHERE id = $%d
+	AND deleted_at IS NULL
 `, strings.Join(setParts, ", "), len(args)-1, len(args))
-		if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		result, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
 			return task.Task{}, err
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return task.Task{}, err
+		}
+		if affected == 0 {
+			return task.Task{}, ErrNotFound
 		}
 	}
 
@@ -448,6 +471,29 @@ WHERE id = $%d
 	return tk, nil
 }
 
+func (r *taskRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	now := time.Now().UTC()
+	result, err := r.db.ExecContext(ctx, `
+UPDATE tasks
+SET deleted_at = $2,
+    status = CASE WHEN status = 'archived' THEN status ELSE 'archived' END,
+    updated_at = $2
+WHERE id = $1
+	AND deleted_at IS NULL
+`, id, now)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *taskRepository) SetStatus(ctx context.Context, taskID uuid.UUID, status task.Status, actor uuid.UUID) (task.Task, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -462,6 +508,7 @@ SET status = $2,
 	published_by = CASE WHEN $2 = 'available' THEN $3 ELSE published_by END,
 	updated_at = $4
 WHERE id = $1
+	AND deleted_at IS NULL
 `
 	if _, err := tx.ExecContext(ctx, query, taskID, status, actor, now); err != nil {
 		return task.Task{}, err
@@ -487,7 +534,7 @@ func (r *taskRepository) Claim(ctx context.Context, input TaskAssignmentInput) (
 	defer tx.Rollback()
 
 	var currentStatus string
-	if err := tx.QueryRowContext(ctx, `SELECT status FROM tasks WHERE id = $1`, input.TaskID).Scan(&currentStatus); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM tasks WHERE id = $1 AND deleted_at IS NULL`, input.TaskID).Scan(&currentStatus); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return task.Task{}, ErrNotFound
 		}
@@ -506,7 +553,7 @@ VALUES ($1, $2, 'claimed', $3)
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE tasks SET status = 'claimed', updated_at = $2 WHERE id = $1
+UPDATE tasks SET status = 'claimed', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
 `, input.TaskID, now); err != nil {
 		return task.Task{}, err
 	}
@@ -546,7 +593,7 @@ WHERE task_id = $1 AND user_id = $2 AND status = 'claimed'
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE tasks SET status = 'available', updated_at = $2 WHERE id = $1
+UPDATE tasks SET status = 'available', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
 `, input.TaskID, now); err != nil {
 		return task.Task{}, err
 	}
@@ -585,7 +632,7 @@ WHERE task_id = $1 AND user_id = $2 AND status = 'claimed'
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE tasks SET status = 'submitted', updated_at = $2 WHERE id = $1
+UPDATE tasks SET status = 'submitted', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
 `, input.TaskID, now); err != nil {
 		return task.Task{}, err
 	}
@@ -624,7 +671,7 @@ WHERE task_id = $1 AND user_id = $2 AND status = 'submitted'
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE tasks SET status = 'completed', updated_at = $2 WHERE id = $1
+UPDATE tasks SET status = 'completed', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
 `, input.TaskID, now); err != nil {
 		return task.Task{}, err
 	}
@@ -675,14 +722,17 @@ SELECT
 	t.created_by,
 	t.published_by,
 	t.created_at,
-	t.updated_at
+	t.updated_at,
+	t.deleted_at
 FROM tasks t
 WHERE t.id = $1
+	AND t.deleted_at IS NULL
 `
 	var (
 		tk           task.Task
 		deadlineNull sql.NullTime
 		pubNull      sql.NullString
+		deletedNull  sql.NullTime
 	)
 	err := tx.QueryRowContext(ctx, query, id).Scan(
 		&tk.ID,
@@ -697,6 +747,7 @@ WHERE t.id = $1
 		&pubNull,
 		&tk.CreatedAt,
 		&tk.UpdatedAt,
+		&deletedNull,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return task.Task{}, ErrNotFound
@@ -713,6 +764,10 @@ WHERE t.id = $1
 		if id, err := uuid.Parse(pubNull.String); err == nil {
 			tk.PublishedBy = &id
 		}
+	}
+	if deletedNull.Valid {
+		del := deletedNull.Time
+		tk.DeletedAt = &del
 	}
 
 	if err := r.attachTagsForTask(ctx, tx, &tk); err != nil {

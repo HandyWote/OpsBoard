@@ -20,6 +20,19 @@ export async function createTask(payload) {
   })
 }
 
+export async function updateTask(taskId, payload) {
+  return requestJSON(`/api/v1/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: payload
+  })
+}
+
+export async function deleteTask(taskId) {
+  return requestJSON(`/api/v1/tasks/${taskId}`, {
+    method: 'DELETE'
+  })
+}
+
 export async function claimTask(taskId) {
   return requestJSON(`/api/v1/tasks/${taskId}/claim`, {
     method: 'POST'

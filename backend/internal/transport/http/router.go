@@ -69,6 +69,7 @@ func NewRouter(cfg config.Config, services service.Registry, log *zap.Logger) ht
 				admin.Use(h.adminRequired())
 				admin.Post("/tasks", h.handleCreateTask)
 				admin.Patch("/tasks/{id}", h.handleUpdateTask)
+				admin.Delete("/tasks/{id}", h.handleDeleteTask)
 				admin.Post("/tasks/{id}/publish", h.handlePublishTask)
 				admin.Post("/tasks/{id}/archive", h.handleArchiveTask)
 

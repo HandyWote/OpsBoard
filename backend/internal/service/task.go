@@ -25,12 +25,13 @@ type TaskService struct {
 
 // TaskListInput 控制任务查询条件。
 type TaskListInput struct {
-	Keyword    string
-	Status     []task.Status
-	SortKey    string
-	Page       int
-	PageSize   int
-	AssignedTo uuid.UUID
+	Keyword        string
+	Status         []task.Status
+	SortKey        string
+	Page           int
+	PageSize       int
+	AssignedTo     uuid.UUID
+	IncludeDeleted bool
 }
 
 // TaskListResult 是分页返回结果。
@@ -39,6 +40,12 @@ type TaskListResult struct {
 	Total    int
 	Page     int
 	PageSize int
+}
+
+// TaskExportOptions 控制任务导出范围，为后续生成报表预留扩展位。
+type TaskExportOptions struct {
+	Status         []task.Status
+	IncludeDeleted bool
 }
 
 // TaskCreateInput 描述新任务的字段。
@@ -86,12 +93,13 @@ func (s *TaskService) ListTasks(ctx context.Context, input TaskListInput) (TaskL
 	offset := (page - 1) * pageSize
 
 	tasks, total, err := s.repo.List(ctx, repository.TaskFilter{
-		Keyword:    strings.TrimSpace(input.Keyword),
-		Status:     input.Status,
-		SortKey:    input.SortKey,
-		Limit:      pageSize,
-		Offset:     offset,
-		AssignedTo: input.AssignedTo,
+		Keyword:        strings.TrimSpace(input.Keyword),
+		Status:         input.Status,
+		SortKey:        input.SortKey,
+		Limit:          pageSize,
+		Offset:         offset,
+		AssignedTo:     input.AssignedTo,
+		IncludeDeleted: input.IncludeDeleted,
 	})
 	if err != nil {
 		return TaskListResult{}, err
@@ -103,6 +111,35 @@ func (s *TaskService) ListTasks(ctx context.Context, input TaskListInput) (TaskL
 		Page:     page,
 		PageSize: pageSize,
 	}, nil
+}
+
+// ExportTasksSnapshot 聚合任务列表（可含软删除记录），为后续 CSV 导出做准备。
+func (s *TaskService) ExportTasksSnapshot(ctx context.Context, opts TaskExportOptions) ([]task.Task, error) {
+	const pageSize = 100
+	page := 1
+	collected := make([]task.Task, 0)
+
+	for {
+		result, err := s.ListTasks(ctx, TaskListInput{
+			Page:           page,
+			PageSize:       pageSize,
+			Status:         opts.Status,
+			IncludeDeleted: opts.IncludeDeleted,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if len(result.Items) == 0 {
+			break
+		}
+		collected = append(collected, result.Items...)
+		if len(collected) >= result.Total || len(result.Items) < pageSize {
+			break
+		}
+		page++
+	}
+
+	return collected, nil
 }
 
 // CreateTask 新建任务，可选择立即发布。
@@ -154,6 +191,14 @@ func (s *TaskService) CreateTask(ctx context.Context, input TaskCreateInput) (ta
 
 // UpdateTask 更新任务字段。
 func (s *TaskService) UpdateTask(ctx context.Context, input TaskUpdateInput) (task.Task, error) {
+	current, err := s.repo.GetByID(ctx, input.ID)
+	if err != nil {
+		return task.Task{}, err
+	}
+	if current.Status == task.StatusCompleted {
+		return task.Task{}, fmt.Errorf("%w: completed tasks are immutable", ErrForbidden)
+	}
+
 	update := repository.TaskUpdateInput{ID: input.ID}
 	if input.Title != nil {
 		title := strings.TrimSpace(*input.Title)
@@ -192,6 +237,11 @@ func (s *TaskService) UpdateTask(ctx context.Context, input TaskUpdateInput) (ta
 	}
 
 	return s.repo.Update(ctx, update)
+}
+
+// DeleteTask 删除指定任务。
+func (s *TaskService) DeleteTask(ctx context.Context, taskID uuid.UUID) error {
+	return s.repo.Delete(ctx, taskID)
 }
 
 // PublishTask 将任务状态切换为可领取。
