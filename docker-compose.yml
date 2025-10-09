@@ -15,6 +15,40 @@ services:
     networks:
       - opsboard-network
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: opsboard-backend
+    restart: always
+    depends_on:
+      - postgres
+    env_file:
+      - backend/.env
+    environment:
+      PORT: 9012
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: opsboard
+      DB_PASSWORD: admin
+      DB_NAME: opsboard
+      DB_SSLMODE: disable
+    networks:
+      - opsboard-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: opsboard-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    networks:
+      - opsboard-network
+
 networks:
   opsboard-network:
     driver: bridge
