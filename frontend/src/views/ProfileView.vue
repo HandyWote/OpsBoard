@@ -6,6 +6,7 @@ import { changePassword, fetchCurrentUser, updateProfile as updateProfileRequest
 import { fetchTasks } from '../services/tasks.js'
 import { isAuthenticated } from '../services/http.js'
 import { mapTaskFromApi } from '../utils/mapTask.js'
+import { logout } from '../services/auth.js'
 
 const router = useRouter()
 const { profile, updateProfile, hydrate } = useCurrentUser()
@@ -31,6 +32,7 @@ const securityError = ref('')
 const completedTasks = ref([])
 const loadingHistory = ref(false)
 const historyError = ref('')
+const loggingOut = ref(false)
 
 watch(
   () => [profile.name, profile.headline, profile.bio],
@@ -197,6 +199,17 @@ const handleCancelSecurity = () => {
   securityMessage.value = ''
 }
 
+const handleLogout = async () => {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    await logout()
+  } finally {
+    loggingOut.value = false
+    router.replace({ name: 'login' })
+  }
+}
+
 onMounted(async () => {
   try {
     const latest = await fetchCurrentUser()
@@ -261,6 +274,11 @@ watchEffect(() => {
             <li>如需调整权限，请联系当前管理员确认。</li>
           </ul>
         </section>
+
+        <button type="button" class="summary-card__logout" :disabled="loggingOut" @click="handleLogout">
+          <span v-if="!loggingOut">退出登录</span>
+          <span v-else class="summary-card__logout-spinner" aria-hidden="true"></span>
+        </button>
       </aside>
 
       <section class="profile-settings">
@@ -526,6 +544,41 @@ watchEffect(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.summary-card__logout {
+  align-self: flex-start;
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.summary-card__logout:hover:enabled {
+  transform: translateY(-2px);
+  background: rgba(255, 79, 79, 0.22);
+  box-shadow: 0 14px 32px rgba(255, 79, 79, 0.25);
+}
+
+.summary-card__logout:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.summary-card__logout-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.6s linear infinite;
 }
 
 .summary-stat {
