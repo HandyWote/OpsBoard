@@ -24,7 +24,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['submit-task', 'verify-task'])
+const emit = defineEmits(['submit-task', 'verify-task', 'reject-task'])
 
 const initials = computed(() => (props.user.name ? props.user.name.slice(0, 1) : '用'))
 const pendingPreview = computed(() => props.pendingTasks.slice(0, 3))
@@ -72,16 +72,22 @@ const formatDeadline = (deadline) => {
 }
 
 const isReviewTask = (task) => task.pendingKind === 'review'
-const actionLabel = (task) => (isReviewTask(task) ? '验收任务' : '完成任务')
 const statusLabel = (task) => (isReviewTask(task) ? '待验收' : '待执行')
 const reviewHint = (task) => (isReviewTask(task) ? `执行人：${task.assignee || '未指派'}` : '')
 
-const handleTaskAction = (task) => {
+const actionLabel = (task) => (isReviewTask(task) ? '验收任务' : '完成任务')
+
+const handlePrimaryAction = (task) => {
   if (isReviewTask(task)) {
     emit('verify-task', task)
   } else {
     emit('submit-task', task)
   }
+}
+
+const handleRejectAction = (task) => {
+  if (!isReviewTask(task)) return
+  emit('reject-task', task)
 }
 </script>
 
@@ -124,7 +130,17 @@ const handleTaskAction = (task) => {
             <p class="task-deadline">截止：{{ formatDeadline(task.deadline) }}</p>
             <p v-if="reviewHint(task)" class="task-meta">{{ reviewHint(task) }}</p>
           </div>
-          <button class="task-action" type="button" @click="handleTaskAction(task)">{{ actionLabel(task) }}</button>
+          <div class="task-actions">
+            <button class="task-action" type="button" @click="handlePrimaryAction(task)">{{ actionLabel(task) }}</button>
+            <button
+              v-if="isReviewTask(task)"
+              class="task-action task-action--ghost"
+              type="button"
+              @click="handleRejectAction(task)"
+            >
+              拒绝任务
+            </button>
+          </div>
         </li>
       </ol>
       <p v-else class="empty">当前没有待处理任务</p>
@@ -328,6 +344,13 @@ const handleTaskAction = (task) => {
   color: #6ee7b7;
 }
 
+.task-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
 .task-action {
   align-self: center;
   padding: 8px 14px;
@@ -348,6 +371,16 @@ const handleTaskAction = (task) => {
 
 .task-action:active {
   transform: translateY(0);
+}
+
+.task-action--ghost {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: rgba(248, 113, 113, 0.92);
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.task-action--ghost:hover {
+  background: rgba(248, 113, 113, 0.22);
 }
 
 .empty {

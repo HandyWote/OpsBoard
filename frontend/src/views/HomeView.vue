@@ -36,6 +36,7 @@ const {
   handleRelease,
   handleSubmitCompletion,
   handleVerifyCompletion,
+  handleRejectCompletion,
   submitTask,
   toggleAdminForAccount,
   startEditTask,
@@ -144,6 +145,7 @@ const handleDeleteTask = (task) => {
         :earned-points="earnedPoints"
         @submit-task="handleSubmitCompletion"
         @verify-task="handleVerifyCompletion"
+        @reject-task="handleRejectCompletion"
       />
     </div>
 

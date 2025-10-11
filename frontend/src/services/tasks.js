@@ -62,3 +62,9 @@ export async function verifyTaskCompletion(taskId) {
     method: 'POST'
   })
 }
+
+export async function rejectTaskSubmission(taskId) {
+  return requestJSON(`/api/v1/tasks/${taskId}/reject`, {
+    method: 'POST'
+  })
+}

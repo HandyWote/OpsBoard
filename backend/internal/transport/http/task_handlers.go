@@ -336,7 +336,32 @@ func (h *Handler) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.services.Tasks.CompleteTask(r.Context(), id, userID)
+	roles := CurrentUserRoles(r.Context())
+
+	updated, err := h.services.Tasks.CompleteTask(r.Context(), id, userID, roles)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, mapTask(updated))
+}
+
+func (h *Handler) handleRejectTask(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUIDParam(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_id", "任务 ID 不合法")
+		return
+	}
+	userID, ok := CurrentUserID(r.Context())
+	if !ok {
+		respondError(w, http.StatusUnauthorized, "unauthorized", "未授权访问")
+		return
+	}
+
+	roles := CurrentUserRoles(r.Context())
+
+	updated, err := h.services.Tasks.RejectTask(r.Context(), id, userID, roles)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

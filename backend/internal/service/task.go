@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 
 	"backend/internal/domain/task"
+	"backend/internal/domain/user"
 	"backend/internal/repository"
 
 	"go.uber.org/zap"
@@ -269,8 +270,8 @@ func (s *TaskService) SubmitTask(ctx context.Context, taskID, userID uuid.UUID) 
 	return s.repo.Submit(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: userID})
 }
 
-// CompleteTask 发布人验收任务，标记为完成并发放奖励。
-func (s *TaskService) CompleteTask(ctx context.Context, taskID, userID uuid.UUID) (task.Task, error) {
+// CompleteTask 审核任务提交，标记为完成并发放奖励。
+func (s *TaskService) CompleteTask(ctx context.Context, taskID, actorID uuid.UUID, actorRoles []string) (task.Task, error) {
 	tk, err := s.repo.GetByID(ctx, taskID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -279,11 +280,7 @@ func (s *TaskService) CompleteTask(ctx context.Context, taskID, userID uuid.UUID
 		return task.Task{}, err
 	}
 
-	owner := tk.CreatedBy
-	if tk.PublishedBy != nil {
-		owner = *tk.PublishedBy
-	}
-	if owner != userID {
+	if !canModerateTask(tk, actorID, actorRoles) {
 		return task.Task{}, ErrForbidden
 	}
 	if tk.Status != task.StatusSubmitted {
@@ -297,6 +294,32 @@ func (s *TaskService) CompleteTask(ctx context.Context, taskID, userID uuid.UUID
 	}
 
 	return s.repo.Complete(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: tk.CurrentAssignee.UserID})
+}
+
+// RejectTask 审核不通过，退回任务继续执行。
+func (s *TaskService) RejectTask(ctx context.Context, taskID, actorID uuid.UUID, actorRoles []string) (task.Task, error) {
+	tk, err := s.repo.GetByID(ctx, taskID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return task.Task{}, ErrNotFound
+		}
+		return task.Task{}, err
+	}
+
+	if !canModerateTask(tk, actorID, actorRoles) {
+		return task.Task{}, ErrForbidden
+	}
+	if tk.Status != task.StatusSubmitted {
+		return task.Task{}, fmt.Errorf("%w: task not awaiting verification", ErrValidation)
+	}
+	if tk.CurrentAssignee == nil || tk.CurrentAssignee.UserID == uuid.Nil {
+		return task.Task{}, fmt.Errorf("%w: task missing valid assignee", ErrValidation)
+	}
+	if tk.CurrentAssignee.Status != task.StatusSubmitted {
+		return task.Task{}, fmt.Errorf("%w: task not awaiting verification", ErrValidation)
+	}
+
+	return s.repo.Reject(ctx, repository.TaskAssignmentInput{TaskID: taskID, UserID: tk.CurrentAssignee.UserID})
 }
 
 // GetTask 返回任务详情。
@@ -329,4 +352,33 @@ func (s *TaskService) normalizeTags(tags []string) []string {
 		cleaned = append(cleaned, tagName)
 	}
 	return cleaned
+}
+
+func canModerateTask(tk task.Task, actorID uuid.UUID, roles []string) bool {
+	if isTaskOwner(tk, actorID) || hasAdminRole(roles) {
+		return true
+	}
+	return false
+}
+
+func isTaskOwner(tk task.Task, actorID uuid.UUID) bool {
+	if actorID == uuid.Nil {
+		return false
+	}
+	if tk.CreatedBy == actorID {
+		return true
+	}
+	if tk.PublishedBy != nil && *tk.PublishedBy == actorID {
+		return true
+	}
+	return false
+}
+
+func hasAdminRole(roles []string) bool {
+	for _, role := range roles {
+		if role == string(user.RoleAdmin) {
+			return true
+		}
+	}
+	return false
 }

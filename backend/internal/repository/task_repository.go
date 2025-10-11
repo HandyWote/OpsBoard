@@ -65,6 +65,7 @@ type TaskRepository interface {
 	Claim(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
 	Release(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
 	Submit(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
+	Reject(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
 	Complete(ctx context.Context, input TaskAssignmentInput) (task.Task, error)
 	GetByID(ctx context.Context, id uuid.UUID) (task.Task, error)
 }
@@ -633,6 +634,46 @@ WHERE task_id = $1 AND user_id = $2 AND status = 'claimed'
 
 	if _, err := tx.ExecContext(ctx, `
 UPDATE tasks SET status = 'submitted', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
+`, input.TaskID, now); err != nil {
+		return task.Task{}, err
+	}
+
+	tk, err := r.fetchTaskTx(ctx, tx, input.TaskID)
+	if err != nil {
+		return task.Task{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return task.Task{}, err
+	}
+
+	return tk, nil
+}
+
+func (r *taskRepository) Reject(ctx context.Context, input TaskAssignmentInput) (task.Task, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return task.Task{}, err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC()
+	res, err := tx.ExecContext(ctx, `
+UPDATE task_assignments
+SET status = 'claimed',
+	completed_at = NULL,
+	released_at = NULL
+WHERE task_id = $1 AND user_id = $2 AND status = 'submitted'
+`, input.TaskID, input.UserID)
+	if err != nil {
+		return task.Task{}, err
+	}
+	if rows, _ := res.RowsAffected(); rows == 0 {
+		return task.Task{}, fmt.Errorf("no submission to reject")
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE tasks SET status = 'claimed', updated_at = $2 WHERE id = $1 AND deleted_at IS NULL
 `, input.TaskID, now); err != nil {
 		return task.Task{}, err
 	}

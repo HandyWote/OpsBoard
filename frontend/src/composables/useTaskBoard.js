@@ -9,7 +9,8 @@ import {
   releaseTask,
   submitTaskProgress,
   updateTask,
-  verifyTaskCompletion
+  verifyTaskCompletion,
+  rejectTaskSubmission
 } from '../services/tasks.js'
 import { mapTaskFromApi } from '../utils/mapTask.js'
 
@@ -107,7 +108,11 @@ export function useTaskBoard() {
       .map((task) => ({ ...task, pendingKind: 'execute' }))
 
     const reviewing = tasks.value
-      .filter((task) => task.status === 'submitted' && task.ownerId === currentId)
+      .filter((task) => {
+        if (task.status !== 'submitted') return false
+        if (task.ownerId === currentId) return true
+        return isAdmin.value
+      })
       .map((task) => ({ ...task, pendingKind: 'review' }))
 
     return [...executing, ...reviewing].sort((a, b) => sortTime(a) - sortTime(b))
@@ -360,6 +365,15 @@ export function useTaskBoard() {
     }
   }
 
+  const handleRejectCompletion = async (task) => {
+    try {
+      await rejectTaskSubmission(task.id)
+      await loadTasks()
+    } catch (error) {
+      console.error('拒绝任务失败', error)
+    }
+  }
+
   const toggleAdminForAccount = async (accountId) => {
     const target = accounts.value.find((item) => item.id === accountId)
     if (!target) return currentUser.role
@@ -446,6 +460,7 @@ export function useTaskBoard() {
     handleRelease,
     handleSubmitCompletion,
     handleVerifyCompletion,
+    handleRejectCompletion,
     toggleAdminForAccount,
     initialize
   }

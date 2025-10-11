@@ -64,6 +64,7 @@ func NewRouter(cfg config.Config, services service.Registry, log *zap.Logger) ht
 			priv.Post("/tasks/{id}/release", h.handleReleaseTask)
 			priv.Post("/tasks/{id}/submit", h.handleSubmitTask)
 			priv.Post("/tasks/{id}/complete", h.handleCompleteTask)
+			priv.Post("/tasks/{id}/reject", h.handleRejectTask)
 
 			priv.Group(func(admin chi.Router) {
 				admin.Use(h.adminRequired())
