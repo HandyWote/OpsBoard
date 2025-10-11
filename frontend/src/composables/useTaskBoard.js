@@ -370,7 +370,7 @@ export function useTaskBoard() {
       await rejectTaskSubmission(task.id)
       await loadTasks()
     } catch (error) {
-      console.error('拒绝任务失败', error)
+      console.error('拒绝接收失败', error)
     }
   }
 

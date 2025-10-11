@@ -138,7 +138,7 @@ const handleRejectAction = (task) => {
               type="button"
               @click="handleRejectAction(task)"
             >
-              拒绝任务
+              拒绝接收
             </button>
           </div>
         </li>
