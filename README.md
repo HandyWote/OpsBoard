@@ -42,6 +42,70 @@ OpsBoard 是专为 try 网运维部门设计的任务认领与管理系统。该
 - **Docker Compose**：多容器应用编排工具
 - **Nginx**：高性能 Web 服务器，用于反向代理和负载均衡
 
+## 🚀 启动指南
+
+### 环境变量准备
+
+在启动项目之前，请先为前后端准备所需的环境变量：
+
+- 后端：在 `backend/.env` 中填写数据库和 JWT 等配置，示例：
+
+```env
+PORT=9012
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_USER=opsboard
+DB_PASSWORD=admin
+DB_NAME=opsboard
+DB_SSLMODE=disable
+JWT_SECRET=please-change-me
+```
+
+- 前端：如有需要自定义 API 地址，可在 `frontend/.env.local` 中设置：
+
+```env
+VITE_API_BASE_URL=http://localhost:9012
+```
+
+> 注意：`.env.local` 不会被提交到版本库，可在本地安全存储敏感信息。
+
+### 本地直接启动
+
+1. 启动 PostgreSQL（可使用本地服务或 docker 容器）。
+2. 启动后端：
+
+   ```bash
+   cd backend
+   go mod tidy
+   go run ./cmd/api
+   ```
+
+3. 启动前端：
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+4. 浏览器访问 `http://localhost:5173`（具体端口取决于 Vite 输出）。
+
+### Docker 一键启动
+
+1. 确保已安装 Docker 与 Docker Compose。
+2. 在项目根目录直接启动服务：
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. 前端默认通过 `http://localhost:8080` 访问，后端和数据库会自动在容器内启动。
+4. 如需停止，执行：
+
+   ```bash
+   docker compose down
+   ```
+
 ## 📄 许可证
 
 本项目采用 [MIT 许可证](LICENSE) - 查看 [LICENSE](LICENSE) 文件了解详情。
