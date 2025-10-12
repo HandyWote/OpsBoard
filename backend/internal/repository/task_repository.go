@@ -120,8 +120,9 @@ EXISTS (
 		where = "WHERE " + strings.Join(conditions, " AND ")
 	}
 
+	sortKey := strings.ToLower(strings.TrimSpace(filter.SortKey))
 	sortClause := "ORDER BY t.created_at DESC"
-	switch strings.ToLower(strings.TrimSpace(filter.SortKey)) {
+	switch sortKey {
 	case "deadline":
 		sortClause = "ORDER BY t.deadline NULLS LAST, t.created_at DESC"
 	case "priority":
@@ -135,6 +136,30 @@ ORDER BY
 		ELSE 5
 	END,
 	t.created_at DESC`
+	case "status_priority":
+		sortClause = `
+ORDER BY
+	CASE
+		WHEN t.status = 'available' THEN 1
+		WHEN t.status = 'claimed' THEN 2
+		WHEN t.status = 'submitted' THEN 3
+		WHEN t.status = 'completed' THEN 4
+		ELSE 5
+	END,
+	CASE t.priority
+		WHEN 'critical' THEN 1
+		WHEN 'high' THEN 2
+		WHEN 'medium' THEN 3
+		WHEN 'low' THEN 4
+		ELSE 5
+	END,
+	t.created_at DESC`
+	case "bounty_desc":
+		sortClause = "ORDER BY t.bounty DESC, t.created_at DESC"
+	case "created_desc":
+		sortClause = "ORDER BY t.created_at DESC"
+	case "created_asc":
+		sortClause = "ORDER BY t.created_at ASC"
 	}
 
 	limit := filter.Limit

@@ -8,7 +8,7 @@ const props = defineProps({
   },
   sortKey: {
     type: String,
-    default: 'priority'
+    default: 'status_priority'
   }
 })
 
@@ -19,8 +19,11 @@ const handleKeyword = (event) => {
 }
 
 const sortOptions = [
-  { value: 'priority', label: '优先级' },
-  { value: 'deadline', label: '截止时间' }
+  { value: 'status_priority', label: '状态 + 优先级' },
+  { value: 'priority', label: '仅优先级' },
+  { value: 'deadline', label: '截止时间' },
+  { value: 'created_desc', label: '最新发布' },
+  { value: 'bounty_desc', label: '赏金最高' }
 ]
 
 const isMenuOpen = ref(false)
@@ -28,7 +31,7 @@ const dropdownRef = ref(null)
 
 const currentSortLabel = computed(() => {
   const option = sortOptions.find((item) => item.value === props.sortKey)
-  return option ? option.label : '优先级'
+  return option ? option.label : '状态 + 优先级'
 })
 
 const toggleMenu = () => {

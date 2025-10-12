@@ -32,7 +32,7 @@ export function useTaskBoard() {
   const loadingAccounts = ref(false)
   const completedTasks = ref([])
 
-  const sortKey = ref('priority')
+  const sortKey = ref('status_priority')
   const keyword = ref('')
 
   const showPublishPanel = ref(false)
@@ -125,10 +125,86 @@ export function useTaskBoard() {
       .sort((a, b) => new Date(a.deadline || 0) - new Date(b.deadline || 0))
   )
 
+  const priorityRanks = {
+    critical: 1,
+    high: 2,
+    medium: 3,
+    low: 4
+  }
+
+  const statusRanks = {
+    available: 1,
+    claimed: 2,
+    submitted: 3,
+    completed: 4
+  }
+
+  const priorityRankOf = (value) => priorityRanks[value] ?? 5
+  const statusRankOf = (value) => statusRanks[value] ?? 6
+
+  const toTimestamp = (value, fallback) => {
+    if (!value) return fallback
+    const date = new Date(value)
+    const ts = date.getTime()
+    return Number.isNaN(ts) ? fallback : ts
+  }
+
+  const compareByCreatedDesc = (a, b) => toTimestamp(b.createdAt, 0) - toTimestamp(a.createdAt, 0)
+  const compareByCreatedAsc = (a, b) => toTimestamp(a.createdAt, Number.MAX_SAFE_INTEGER) - toTimestamp(b.createdAt, Number.MAX_SAFE_INTEGER)
+
+  const compareByPriority = (a, b) => {
+    const diff = priorityRankOf(a.priority) - priorityRankOf(b.priority)
+    if (diff !== 0) return diff
+    return compareByCreatedDesc(a, b)
+  }
+
+  const compareByDeadline = (a, b) => {
+    const deadlineOf = (task) => toTimestamp(task.deadline, Number.MAX_SAFE_INTEGER)
+    const diff = deadlineOf(a) - deadlineOf(b)
+    if (diff !== 0) return diff
+    return compareByCreatedDesc(a, b)
+  }
+
+  const compareByStatusPriority = (a, b) => {
+    const statusDiff = statusRankOf(a.status) - statusRankOf(b.status)
+    if (statusDiff !== 0) return statusDiff
+
+    const priorityDiff = priorityRankOf(a.priority) - priorityRankOf(b.priority)
+    if (priorityDiff !== 0) return priorityDiff
+
+    return compareByCreatedDesc(a, b)
+  }
+
+  const compareByBountyDesc = (a, b) => {
+    const rewardA = Number(a.reward) || 0
+    const rewardB = Number(b.reward) || 0
+    if (rewardA !== rewardB) {
+      return rewardB - rewardA
+    }
+    return compareByCreatedDesc(a, b)
+  }
+
+  const sorters = {
+    status_priority: compareByStatusPriority,
+    priority: compareByPriority,
+    deadline: compareByDeadline,
+    bounty_desc: compareByBountyDesc,
+    created_desc: compareByCreatedDesc,
+    created_asc: compareByCreatedAsc
+  }
+
+  const sortedTasks = computed(() => {
+    const list = tasks.value.slice()
+    const sorter = sorters[sortKey.value]
+    if (!sorter) return list
+    return list.sort(sorter)
+  })
+
   const filteredTasks = computed(() => {
     const term = keyword.value.trim().toLowerCase()
-    if (!term) return tasks.value
-    return tasks.value.filter((task) => `${task.id} ${task.title} ${task.summary}`.toLowerCase().includes(term))
+    const source = sortedTasks.value
+    if (!term) return source
+    return source.filter((task) => `${task.id} ${task.title} ${task.summary}`.toLowerCase().includes(term))
   })
 
   const updatePublishForm = (field, value) => {
